@@ -76,11 +76,25 @@ def get_removable_drives():
             label = ''
             mounts = []
 
+        # Get vendor/model from sysfs
+        vendor = ''
+        model = ''
+        try:
+            vendor = (dev / 'device' / 'vendor').read_text().strip()
+        except OSError:
+            pass
+        try:
+            model = (dev / 'device' / 'model').read_text().strip()
+        except OSError:
+            pass
+
         drives.append({
             'device': device_path,
             'name': name,
             'size': size_bytes,
             'label': label,
+            'vendor': vendor,
+            'model': model,
             'mounted': mounts,
         })
     return drives
@@ -512,8 +526,14 @@ class DDImagerApp(Adw.Application):
         # Left side: device path (bold) and label
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
 
+        # Device path + vendor/model
+        vendor_model = ' '.join(filter(None, [drive.get('vendor', ''), drive.get('model', '')]))
+        if vendor_model and vendor_model != 'Mass Storage':
+            device_markup = f'<b>{GLib.markup_escape_text(drive["device"])}</b>  <small>{GLib.markup_escape_text(vendor_model)}</small>'
+        else:
+            device_markup = f'<b>{GLib.markup_escape_text(drive["device"])}</b>'
         device_label = Gtk.Label(halign=Gtk.Align.START)
-        device_label.set_markup(f'<b>{GLib.markup_escape_text(drive["device"])}</b>')
+        device_label.set_markup(device_markup)
         left.append(device_label)
 
         if drive['label']:
@@ -693,10 +713,15 @@ class DDImagerApp(Adw.Application):
         # Drive info
         if self.target_device:
             dev = self.target_device
-            label_part = f'  —  {dev["label"]}' if dev.get('label') else ''
+            vendor_model = ' '.join(filter(None, [dev.get('vendor', ''), dev.get('model', '')]))
+            parts = [dev['device']]
+            if vendor_model and vendor_model != 'Mass Storage':
+                parts.append(vendor_model)
+            if dev.get('label'):
+                parts.append(dev['label'])
             size_str = format_file_size(dev['size'])
             self.confirm_drive_label.set_label(
-                f'{dev["device"]}{label_part}  ({size_str})'
+                f'{" — ".join(parts)}  ({size_str})'
             )
             self.confirm_drive_label.remove_css_class('dim-label')
         else:
