@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import signal
 import stat
 import subprocess
@@ -2436,7 +2437,7 @@ class DDImagerApp(Adw.Application):
             if source == 'ones':
                 dd_cmd = [
                     'pkexec', 'bash', '-c',
-                    f"tr '\\0' '\\377' < /dev/zero | dd of={device_path} bs=4M status=progress oflag=sync conv=fsync 2>&1"
+                    f"tr '\\0' '\\377' < /dev/zero | dd of={shlex.quote(device_path)} bs=4M status=progress oflag=sync conv=fsync 2>&1"
                 ]
             else:
                 dd_cmd = [
@@ -2461,11 +2462,12 @@ class DDImagerApp(Adw.Application):
                 return
 
             pattern = re.compile(r'(\d+)\s+bytes')
-            stderr_fd = self.dd_process.stderr.fileno()
+            # Ones pass uses 2>&1 so progress arrives on stdout, not stderr
+            progress_fd = self.dd_process.stdout.fileno() if source == 'ones' else self.dd_process.stderr.fileno()
             buf = ''
             while True:
                 try:
-                    chunk = os.read(stderr_fd, 4096)
+                    chunk = os.read(progress_fd, 4096)
                 except OSError:
                     break
                 if not chunk:
@@ -2491,11 +2493,24 @@ class DDImagerApp(Adw.Application):
                             GLib.idle_add(self._update_wipe_progress, overall, bytes_written, device_size, line.strip())
 
             self.dd_process.wait()
+            returncode = self.dd_process.returncode
+            remaining_err = ''
+            try:
+                remaining_err = self.dd_process.stderr.read().decode('utf-8', errors='replace') if self.dd_process.stderr else ''
+            except Exception:
+                pass
             self.dd_process = None
 
             if self.wipe_cancelled:
                 GLib.idle_add(self._on_wipe_cancelled)
                 return
+
+            # dd exits non-zero when device is full (ENOSPC) — that's expected
+            if returncode != 0:
+                all_err = (buf + remaining_err).lower()
+                if 'no space left' not in all_err:
+                    GLib.idle_add(self._on_wipe_error, f'Wipe pass failed (exit code {returncode})')
+                    return
 
         # Post-wipe formatting
         if self.wipe_format != 'raw':
