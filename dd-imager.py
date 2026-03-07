@@ -1981,7 +1981,87 @@ class DDImagerApp(Adw.Application):
     # ---- Welcome and wipe page stubs ----
 
     def _build_welcome_page(self):
-        return Gtk.Box()
+        """Build the welcome/mode selection page with two large cards."""
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+            spacing=32,
+        )
+
+        heading = Gtk.Label(label='DD-imager')
+        heading.add_css_class('title-1')
+        page.append(heading)
+
+        subtitle = Gtk.Label(label='What would you like to do?')
+        subtitle.add_css_class('dim-label')
+        page.append(subtitle)
+
+        # Cards row
+        cards_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.CENTER,
+            spacing=24,
+        )
+
+        # Write Image card
+        write_card = Gtk.Button()
+        write_card.add_css_class('mode-card')
+        write_card.set_has_frame(False)
+        write_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                            halign=Gtk.Align.CENTER)
+
+        # Icon: downward arrow onto a rectangle (representing writing to drive)
+        write_icon = Gtk.Label()
+        write_icon.add_css_class('mode-card-icon')
+        write_icon.set_markup('<span size="xx-large" weight="bold">\u2913\u25a0</span>')
+        write_box.append(write_icon)
+
+        write_title = Gtk.Label(label='Write Image')
+        write_title.add_css_class('mode-card-title')
+        write_box.append(write_title)
+
+        write_sub = Gtk.Label(label='Write an ISO/IMG to a USB drive')
+        write_sub.add_css_class('mode-card-subtitle')
+        write_sub.set_wrap(True)
+        write_sub.set_max_width_chars(25)
+        write_sub.set_justify(Gtk.Justification.CENTER)
+        write_box.append(write_sub)
+
+        write_card.set_child(write_box)
+        write_card.connect('clicked', lambda _b: self._on_mode_selected('write'))
+        cards_row.append(write_card)
+
+        # Wipe Drive card
+        wipe_card = Gtk.Button()
+        wipe_card.add_css_class('mode-card')
+        wipe_card.set_has_frame(False)
+        wipe_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                           halign=Gtk.Align.CENTER)
+
+        # Icon: X mark on a rectangle (representing wiping a drive clean)
+        wipe_icon = Gtk.Label()
+        wipe_icon.add_css_class('mode-card-icon')
+        wipe_icon.set_markup('<span size="xx-large" weight="bold">\u2718\u25a0</span>')
+        wipe_box.append(wipe_icon)
+
+        wipe_title = Gtk.Label(label='Wipe Drive')
+        wipe_title.add_css_class('mode-card-title')
+        wipe_box.append(wipe_title)
+
+        wipe_sub = Gtk.Label(label='Securely erase all data from a USB drive')
+        wipe_sub.add_css_class('mode-card-subtitle')
+        wipe_sub.set_wrap(True)
+        wipe_sub.set_max_width_chars(25)
+        wipe_sub.set_justify(Gtk.Justification.CENTER)
+        wipe_box.append(wipe_sub)
+
+        wipe_card.set_child(wipe_box)
+        wipe_card.connect('clicked', lambda _b: self._on_mode_selected('wipe'))
+        cards_row.append(wipe_card)
+
+        page.append(cards_row)
+        return page
 
     def _build_wipe_drive_page(self):
         # Need wipe_drive_listbox and wipe_drive_empty_label for _refresh_drives
