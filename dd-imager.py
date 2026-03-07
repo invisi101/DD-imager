@@ -25,6 +25,341 @@ PAGES = [
     ('confirm-write',    'Confirm & Write',  'Step 4: Confirm & Write'),
 ]
 
+CUSTOM_CSS = """
+/* ==== DD-imager Neon Theme ==== */
+
+@define-color accent_bg_color #818cf8;
+@define-color accent_fg_color #ffffff;
+@define-color accent_color #a5b4fc;
+@define-color window_bg_color #0f0f23;
+@define-color view_bg_color #141428;
+@define-color card_bg_color #1a1a2e;
+@define-color headerbar_bg_color #12122a;
+@define-color headerbar_fg_color #e0e0ff;
+@define-color popover_bg_color #1a1a2e;
+@define-color dialog_bg_color #1a1a2e;
+
+/* Window background with subtle radial glow */
+window.background {
+    background-image:
+        radial-gradient(ellipse at 50% 20%, alpha(#818cf8, 0.06) 0%, transparent 70%),
+        linear-gradient(180deg, #0f0f23, #12122e);
+}
+
+/* Headerbar */
+headerbar {
+    background-image: linear-gradient(180deg, #1a1a2e, #12122a);
+    border-bottom: 1px solid alpha(#818cf8, 0.2);
+    box-shadow: 0 1px 8px alpha(#000000, 0.5);
+}
+
+headerbar .title {
+    color: #e0e0ff;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+headerbar button {
+    color: #c4c4f0;
+}
+
+headerbar button:hover {
+    color: #e0e0ff;
+    background-color: alpha(#818cf8, 0.15);
+}
+
+/* Suggested action — pink-purple gradient */
+button.suggested-action {
+    background-image: linear-gradient(135deg, #f472b6, #818cf8);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 2px 10px alpha(#f472b6, 0.35);
+    text-shadow: 0 1px 2px alpha(#000000, 0.3);
+    font-weight: 600;
+    transition: all 200ms ease;
+}
+
+button.suggested-action:hover {
+    background-image: linear-gradient(135deg, #f9a8d4, #a5b4fc);
+    box-shadow: 0 2px 20px alpha(#f472b6, 0.6);
+}
+
+button.suggested-action:active {
+    background-image: linear-gradient(135deg, #ec4899, #6366f1);
+}
+
+/* Destructive action — red glow */
+button.destructive-action {
+    background-image: linear-gradient(135deg, #ef4444, #b91c1c);
+    border: none;
+    box-shadow: 0 2px 10px alpha(#ef4444, 0.35);
+    font-weight: 600;
+    transition: all 200ms ease;
+}
+
+button.destructive-action:hover {
+    box-shadow: 0 2px 20px alpha(#ef4444, 0.6);
+    background-image: linear-gradient(135deg, #f87171, #dc2626);
+}
+
+/* Pill buttons */
+button.pill {
+    border: 1px solid alpha(#818cf8, 0.3);
+    transition: all 200ms ease;
+}
+
+button.pill:hover {
+    border-color: alpha(#818cf8, 0.6);
+    box-shadow: 0 0 10px alpha(#818cf8, 0.2);
+}
+
+/* Progress bar — cyan-green-purple gradient */
+progressbar trough {
+    background-color: #1a1a2e;
+    border: 1px solid #2d2d5e;
+    border-radius: 10px;
+    min-height: 22px;
+}
+
+progressbar trough progress {
+    background-image: linear-gradient(90deg, #34d399, #06b6d4, #818cf8);
+    border-radius: 10px;
+    box-shadow: 0 0 14px alpha(#34d399, 0.5);
+    min-height: 22px;
+}
+
+progressbar text {
+    color: #e0e0ff;
+    font-weight: bold;
+    font-size: 12px;
+    text-shadow: 0 1px 3px alpha(#000000, 0.6);
+}
+
+/* Entry fields */
+entry {
+    background-color: #16213e;
+    border: 1px solid #2d2d5e;
+    color: #e0e0ff;
+    border-radius: 8px;
+    caret-color: #818cf8;
+    transition: all 200ms ease;
+}
+
+entry:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 10px alpha(#818cf8, 0.35);
+}
+
+/* Cards */
+.card {
+    background-color: #1a1a2e;
+    border: 1px solid alpha(#818cf8, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px alpha(#000000, 0.3);
+}
+
+/* Boxed list rows */
+.boxed-list {
+    background-color: transparent;
+}
+
+.boxed-list > row {
+    background-color: #1a1a2e;
+    border-bottom: 1px solid alpha(#818cf8, 0.08);
+    transition: all 150ms ease;
+}
+
+.boxed-list > row:selected {
+    background-image: linear-gradient(90deg, alpha(#818cf8, 0.15), alpha(#f472b6, 0.08));
+    box-shadow: inset 3px 0 0 #818cf8;
+}
+
+.boxed-list > row:hover:not(:selected) {
+    background-color: alpha(#818cf8, 0.06);
+}
+
+/* Titles */
+.title-1 {
+    color: #e0e0ff;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+}
+
+.title-2 {
+    color: #c4c4f0;
+    font-weight: 700;
+}
+
+.heading {
+    color: #f472b6;
+    font-weight: 600;
+}
+
+.dim-label {
+    color: alpha(#c4c4f0, 0.5);
+}
+
+.caption {
+    font-size: 11px;
+}
+
+/* Success — neon green */
+.success {
+    color: #34d399;
+    font-weight: 600;
+}
+
+/* Error — neon red */
+.error {
+    color: #f87171;
+    font-weight: 600;
+}
+
+/* Warning banner */
+.warning-banner {
+    background-image: linear-gradient(90deg, alpha(#f59e0b, 0.12), alpha(#ef4444, 0.08));
+    border-bottom: 1px solid alpha(#f59e0b, 0.25);
+}
+
+.warning-banner label {
+    color: #fbbf24;
+    font-weight: 600;
+}
+
+/* Separator */
+separator {
+    background-color: alpha(#818cf8, 0.12);
+    min-height: 1px;
+}
+
+/* Scrollbar */
+scrollbar slider {
+    background-color: alpha(#818cf8, 0.25);
+    border-radius: 4px;
+    min-width: 6px;
+}
+
+scrollbar slider:hover {
+    background-color: alpha(#818cf8, 0.45);
+}
+
+/* ---- Step Indicator ---- */
+.step-indicator {
+    padding: 14px 24px 10px 24px;
+    border-bottom: 1px solid alpha(#818cf8, 0.08);
+}
+
+.step-dot {
+    min-width: 10px;
+    min-height: 10px;
+    border-radius: 5px;
+    background-color: #2d2d5e;
+    transition: all 300ms ease;
+}
+
+.step-dot-active {
+    min-width: 14px;
+    min-height: 14px;
+    border-radius: 7px;
+    background-image: linear-gradient(135deg, #f472b6, #818cf8);
+    box-shadow: 0 0 10px alpha(#f472b6, 0.6);
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.step-dot-completed {
+    background-image: linear-gradient(135deg, #34d399, #06b6d4);
+    box-shadow: 0 0 6px alpha(#34d399, 0.4);
+}
+
+.step-connector {
+    min-width: 40px;
+    min-height: 2px;
+    border-radius: 1px;
+    background-color: #2d2d5e;
+    transition: all 300ms ease;
+}
+
+.step-connector-done {
+    background-image: linear-gradient(90deg, #34d399, #06b6d4);
+    box-shadow: 0 0 4px alpha(#34d399, 0.3);
+}
+
+.step-label {
+    color: alpha(#c4c4f0, 0.35);
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 300ms ease;
+}
+
+.step-label-active {
+    color: #f472b6;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+.step-label-completed {
+    color: #34d399;
+    font-weight: 600;
+}
+
+/* Pulse animation for active step */
+@keyframes pulse-glow {
+    0%   { box-shadow: 0 0 6px alpha(#f472b6, 0.4); }
+    50%  { box-shadow: 0 0 18px alpha(#f472b6, 0.8); }
+    100% { box-shadow: 0 0 6px alpha(#f472b6, 0.4); }
+}
+
+/* Alert dialog */
+dialog {
+    background-color: #1a1a2e;
+}
+
+/* ---- Verify mode toggle buttons ---- */
+.verify-mode-toggle {
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.verify-mode-toggle button {
+    background-color: #16213e;
+    color: #c4c4f0;
+    border: 1px solid #2d2d5e;
+    font-weight: 600;
+    padding: 6px 18px;
+    transition: all 200ms ease;
+}
+
+.verify-mode-toggle button:hover {
+    background-color: alpha(#818cf8, 0.15);
+    border-color: alpha(#818cf8, 0.4);
+}
+
+.verify-mode-toggle button:checked {
+    background-image: linear-gradient(135deg, #f472b6, #818cf8);
+    color: #ffffff;
+    border-color: transparent;
+    box-shadow: 0 2px 10px alpha(#f472b6, 0.35);
+    text-shadow: 0 1px 2px alpha(#000000, 0.3);
+}
+
+/* GPG file info rows */
+.gpg-file-row {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.gpg-file-label {
+    color: #c4c4f0;
+    font-size: 13px;
+}
+
+.gpg-file-label-set {
+    color: #34d399;
+    font-size: 13px;
+    font-weight: 500;
+}
+"""
+
 
 def format_file_size(size_bytes):
     """Return a human-readable file size string (e.g. '4.2 GB')."""
@@ -108,11 +443,18 @@ class DDImagerApp(Adw.Application):
     # ---- UI construction ----
 
     def on_activate(self, app):
+        # Force dark color scheme
+        style_manager = Adw.StyleManager.get_default()
+        style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+
+        # Load custom neon CSS
+        self._load_css()
+
         self.win = Adw.ApplicationWindow(
             application=app,
             title='DD-imager',
-            default_width=600,
-            default_height=500,
+            default_width=640,
+            default_height=540,
         )
 
         # Wizard state
@@ -120,6 +462,10 @@ class DDImagerApp(Adw.Application):
         self.completed = [False] * len(PAGES)
         self.checksum_verified = False
         self.checksum_skipped = False
+        self.gpg_verified = False
+        self.verify_mode = 'sha'  # 'sha' or 'gpg'
+        self.sig_file_path = None
+        self.key_file_path = None
         self.target_device = None
 
         # --- Header bar ---
@@ -142,11 +488,14 @@ class DDImagerApp(Adw.Application):
         self.btn_skip.connect('clicked', self._on_skip_checksum)
         self.header.pack_end(self.btn_skip)
 
+        # --- Step indicator ---
+        step_indicator = self._build_step_indicator()
+
         # --- Stack with pages ---
         self.stack = Gtk.Stack()
         self.stack.set_vexpand(True)
         self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        self.stack.set_transition_duration(200)
+        self.stack.set_transition_duration(250)
 
         # Page 0: Select ISO (real implementation)
         self.iso_path = None
@@ -163,9 +512,10 @@ class DDImagerApp(Adw.Application):
         self.write_cancelled = False
         self.stack.add_named(self._build_confirm_page(), 'confirm-write')
 
-        # --- Main layout: header on top, stack below ---
+        # --- Main layout: header, step indicator, stack ---
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         vbox.append(self.header)
+        vbox.append(step_indicator)
         vbox.append(self.stack)
         self.win.set_content(vbox)
 
@@ -173,6 +523,105 @@ class DDImagerApp(Adw.Application):
         self.update_nav_buttons()
 
         self.win.present()
+
+    # ---- CSS and step indicator ----
+
+    def _load_css(self):
+        """Load custom neon theme CSS."""
+        from gi.repository import Gdk
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(CUSTOM_CSS.encode('utf-8'))
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+
+    def _build_step_indicator(self):
+        """Build a step indicator with dots, connectors, and labels."""
+        outer = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6,
+            halign=Gtk.Align.CENTER,
+        )
+        outer.add_css_class('step-indicator')
+
+        # Row for dots and connectors
+        dots_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+            spacing=0,
+        )
+
+        # Row for labels
+        labels_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.CENTER,
+            spacing=0,
+        )
+
+        step_names = ['ISO', 'Checksum', 'Drive', 'Write']
+        self.step_dots = []
+        self.step_connectors = []
+        self.step_labels = []
+
+        for i, name in enumerate(step_names):
+            # Dot
+            dot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+            dot.add_css_class('step-dot')
+            if i == 0:
+                dot.add_css_class('step-dot-active')
+            dots_row.append(dot)
+            self.step_dots.append(dot)
+
+            # Label
+            label = Gtk.Label(label=name, halign=Gtk.Align.CENTER)
+            label.set_width_chars(8)
+            label.add_css_class('step-label')
+            if i == 0:
+                label.add_css_class('step-label-active')
+            labels_row.append(label)
+            self.step_labels.append(label)
+
+            # Connector (between dots)
+            if i < len(step_names) - 1:
+                connector = Gtk.Box(valign=Gtk.Align.CENTER)
+                connector.add_css_class('step-connector')
+                dots_row.append(connector)
+                self.step_connectors.append(connector)
+
+                # Spacer to match connector width in labels row
+                spacer = Gtk.Box()
+                spacer.set_size_request(40, 1)
+                labels_row.append(spacer)
+
+        outer.append(dots_row)
+        outer.append(labels_row)
+        return outer
+
+    def _update_step_indicator(self):
+        """Update step dots, connectors, and labels for the current page."""
+        for i in range(len(PAGES)):
+            dot = self.step_dots[i]
+            label = self.step_labels[i]
+
+            dot.remove_css_class('step-dot-active')
+            dot.remove_css_class('step-dot-completed')
+            label.remove_css_class('step-label-active')
+            label.remove_css_class('step-label-completed')
+
+            if i == self.current_page:
+                dot.add_css_class('step-dot-active')
+                label.add_css_class('step-label-active')
+            elif i < self.current_page:
+                dot.add_css_class('step-dot-completed')
+                label.add_css_class('step-label-completed')
+
+        for i, connector in enumerate(self.step_connectors):
+            connector.remove_css_class('step-connector-done')
+            if i < self.current_page:
+                connector.add_css_class('step-connector-done')
 
     # ---- ISO page ----
 
@@ -255,7 +704,7 @@ class DDImagerApp(Adw.Application):
     # ---- Checksum page ----
 
     def _build_checksum_page(self):
-        """Build the Verify Checksum page with hash entry, verify button, and result label."""
+        """Build the Verify Checksum page with mode toggle and SHA-256/OpenPGP content."""
         page = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             halign=Gtk.Align.CENTER,
@@ -274,34 +723,126 @@ class DDImagerApp(Adw.Application):
         self.checksum_file_label.set_max_width_chars(50)
         page.append(self.checksum_file_label)
 
-        # SHA-256 entry field
+        # --- Mode toggle: SHA-256 | OpenPGP ---
+        toggle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER)
+        toggle_box.add_css_class('linked')
+        toggle_box.add_css_class('verify-mode-toggle')
+
+        self.btn_mode_sha = Gtk.ToggleButton(label='SHA-256')
+        self.btn_mode_sha.set_active(True)
+        toggle_box.append(self.btn_mode_sha)
+
+        self.btn_mode_gpg = Gtk.ToggleButton(label='OpenPGP')
+        self.btn_mode_gpg.set_group(self.btn_mode_sha)
+        toggle_box.append(self.btn_mode_gpg)
+
+        self.btn_mode_sha.connect('toggled', self._on_verify_mode_changed)
+        self.btn_mode_gpg.connect('toggled', self._on_verify_mode_changed)
+
+        page.append(toggle_box)
+
+        # === SHA-256 content ===
+        self.sha_content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.CENTER,
+            spacing=16,
+        )
+
         self.hash_entry = Gtk.Entry()
         self.hash_entry.set_placeholder_text('Paste expected SHA-256 hash here')
         self.hash_entry.set_width_chars(64)
         self.hash_entry.set_max_width_chars(64)
-        page.append(self.hash_entry)
+        self.sha_content.append(self.hash_entry)
 
-        # Row for Verify button and spinner
-        action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
-                             halign=Gtk.Align.CENTER)
+        sha_action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
+                                  halign=Gtk.Align.CENTER)
 
         self.btn_verify = Gtk.Button(label='Verify')
         self.btn_verify.add_css_class('pill')
         self.btn_verify.add_css_class('suggested-action')
         self.btn_verify.connect('clicked', self._on_verify_clicked)
-        action_row.append(self.btn_verify)
+        sha_action_row.append(self.btn_verify)
 
         self.checksum_spinner = Gtk.Spinner()
         self.checksum_spinner.set_visible(False)
-        action_row.append(self.checksum_spinner)
+        sha_action_row.append(self.checksum_spinner)
 
-        page.append(action_row)
+        self.sha_content.append(sha_action_row)
 
-        # Result label (green/red)
         self.checksum_result_label = Gtk.Label(label='')
         self.checksum_result_label.set_wrap(True)
         self.checksum_result_label.set_max_width_chars(50)
-        page.append(self.checksum_result_label)
+        self.sha_content.append(self.checksum_result_label)
+
+        page.append(self.sha_content)
+
+        # === OpenPGP content ===
+        self.gpg_content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.CENTER,
+            spacing=12,
+        )
+        self.gpg_content.set_visible(False)
+
+        # Sig file row
+        sig_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+                          halign=Gtk.Align.CENTER)
+        sig_row.add_css_class('gpg-file-row')
+
+        self.btn_sig_browse = Gtk.Button(label='Signature file\u2026')
+        self.btn_sig_browse.add_css_class('pill')
+        self.btn_sig_browse.connect('clicked', self._on_sig_browse_clicked)
+        sig_row.append(self.btn_sig_browse)
+
+        self.sig_file_label = Gtk.Label(label='No .sig/.asc file selected')
+        self.sig_file_label.add_css_class('gpg-file-label')
+        self.sig_file_label.set_wrap(True)
+        self.sig_file_label.set_max_width_chars(40)
+        sig_row.append(self.sig_file_label)
+
+        self.gpg_content.append(sig_row)
+
+        # Key file row (optional)
+        key_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
+                          halign=Gtk.Align.CENTER)
+        key_row.add_css_class('gpg-file-row')
+
+        self.btn_key_browse = Gtk.Button(label='Signing key\u2026')
+        self.btn_key_browse.add_css_class('pill')
+        self.btn_key_browse.connect('clicked', self._on_key_browse_clicked)
+        key_row.append(self.btn_key_browse)
+
+        self.key_file_label = Gtk.Label(label='Optional — import if not in keyring')
+        self.key_file_label.add_css_class('gpg-file-label')
+        self.key_file_label.set_wrap(True)
+        self.key_file_label.set_max_width_chars(40)
+        key_row.append(self.key_file_label)
+
+        self.gpg_content.append(key_row)
+
+        # GPG verify button + spinner
+        gpg_action_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12,
+                                  halign=Gtk.Align.CENTER)
+
+        self.btn_gpg_verify = Gtk.Button(label='Verify Signature')
+        self.btn_gpg_verify.add_css_class('pill')
+        self.btn_gpg_verify.add_css_class('suggested-action')
+        self.btn_gpg_verify.connect('clicked', self._on_gpg_verify_clicked)
+        gpg_action_row.append(self.btn_gpg_verify)
+
+        self.gpg_spinner = Gtk.Spinner()
+        self.gpg_spinner.set_visible(False)
+        gpg_action_row.append(self.gpg_spinner)
+
+        self.gpg_content.append(gpg_action_row)
+
+        # GPG result label
+        self.gpg_result_label = Gtk.Label(label='')
+        self.gpg_result_label.set_wrap(True)
+        self.gpg_result_label.set_max_width_chars(50)
+        self.gpg_content.append(self.gpg_result_label)
+
+        page.append(self.gpg_content)
 
         return page
 
@@ -323,6 +864,18 @@ class DDImagerApp(Adw.Application):
 
         self.checksum_file_label.set_label(f'{filename} — {size_str}')
         self.checksum_file_label.remove_css_class('dim-label')
+
+        # Auto-detect .sig/.asc file alongside the ISO
+        if self.sig_file_path is None:
+            for ext in ('.sig', '.asc'):
+                candidate = self.iso_path + ext
+                if os.path.isfile(candidate):
+                    self.sig_file_path = candidate
+                    sig_name = GLib.path_get_basename(candidate)
+                    self.sig_file_label.set_label(sig_name)
+                    self.sig_file_label.remove_css_class('gpg-file-label')
+                    self.sig_file_label.add_css_class('gpg-file-label-set')
+                    break
 
     def _on_verify_clicked(self, _button):
         """Start background SHA-256 computation."""
@@ -398,6 +951,186 @@ class DDImagerApp(Adw.Application):
         self.checksum_result_label.add_css_class('error')
         return False
 
+    # ---- OpenPGP verification ----
+
+    def _on_verify_mode_changed(self, button):
+        """Toggle visibility of SHA-256 vs OpenPGP content boxes."""
+        if not button.get_active():
+            return
+        if button is self.btn_mode_sha:
+            self.verify_mode = 'sha'
+            self.sha_content.set_visible(True)
+            self.gpg_content.set_visible(False)
+        else:
+            self.verify_mode = 'gpg'
+            self.sha_content.set_visible(False)
+            self.gpg_content.set_visible(True)
+        self.update_nav_buttons()
+
+    def _on_sig_browse_clicked(self, _button):
+        """Open a file dialog for selecting a .sig/.asc signature file."""
+        dialog = Gtk.FileDialog()
+        dialog.set_title('Select Signature File')
+
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name('Signature files (*.sig, *.asc)')
+        file_filter.add_pattern('*.sig')
+        file_filter.add_pattern('*.asc')
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(file_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(file_filter)
+
+        if self.iso_path:
+            parent_dir = os.path.dirname(self.iso_path)
+            dialog.set_initial_folder(Gio.File.new_for_path(parent_dir))
+
+        dialog.open(self.win, None, self._on_sig_file_chosen)
+
+    def _on_sig_file_chosen(self, dialog, result):
+        """Handle signature file selection."""
+        try:
+            gfile = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        self.sig_file_path = gfile.get_path()
+        sig_name = GLib.path_get_basename(self.sig_file_path)
+        self.sig_file_label.set_label(sig_name)
+        self.sig_file_label.remove_css_class('gpg-file-label')
+        self.sig_file_label.add_css_class('gpg-file-label-set')
+
+    def _on_key_browse_clicked(self, _button):
+        """Open a file dialog for selecting a signing key file."""
+        dialog = Gtk.FileDialog()
+        dialog.set_title('Select Signing Key')
+
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name('Key files (*.key, *.asc, *.gpg)')
+        file_filter.add_pattern('*.key')
+        file_filter.add_pattern('*.asc')
+        file_filter.add_pattern('*.gpg')
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(file_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(file_filter)
+
+        if self.iso_path:
+            parent_dir = os.path.dirname(self.iso_path)
+            dialog.set_initial_folder(Gio.File.new_for_path(parent_dir))
+
+        dialog.open(self.win, None, self._on_key_file_chosen)
+
+    def _on_key_file_chosen(self, dialog, result):
+        """Handle key file selection."""
+        try:
+            gfile = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        self.key_file_path = gfile.get_path()
+        key_name = GLib.path_get_basename(self.key_file_path)
+        self.key_file_label.set_label(key_name)
+        self.key_file_label.remove_css_class('gpg-file-label')
+        self.key_file_label.add_css_class('gpg-file-label-set')
+
+    def _on_gpg_verify_clicked(self, _button):
+        """Start GPG signature verification in background thread."""
+        if self.sig_file_path is None:
+            self.gpg_result_label.set_label('Please select a signature file.')
+            self.gpg_result_label.remove_css_class('success')
+            self.gpg_result_label.remove_css_class('error')
+            return
+
+        if self.iso_path is None:
+            self.gpg_result_label.set_label('No image file selected.')
+            self.gpg_result_label.remove_css_class('success')
+            self.gpg_result_label.remove_css_class('error')
+            return
+
+        # Disable controls during verification
+        self.btn_gpg_verify.set_sensitive(False)
+        self.btn_sig_browse.set_sensitive(False)
+        self.btn_key_browse.set_sensitive(False)
+        self.gpg_spinner.set_visible(True)
+        self.gpg_spinner.start()
+        self.gpg_result_label.set_label('')
+        self.gpg_result_label.remove_css_class('success')
+        self.gpg_result_label.remove_css_class('error')
+
+        thread = threading.Thread(target=self._gpg_verify_thread, daemon=True)
+        thread.start()
+
+    def _gpg_verify_thread(self):
+        """Run gpg --import (if key provided) then gpg --verify in background."""
+        # Import key if provided
+        if self.key_file_path:
+            try:
+                result = subprocess.run(
+                    ['gpg', '--import', self.key_file_path],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if result.returncode != 0:
+                    detail = result.stderr.strip() or 'Key import failed'
+                    GLib.idle_add(self._on_gpg_verify_complete, False, f'Key import error: {detail}')
+                    return
+            except FileNotFoundError:
+                GLib.idle_add(self._on_gpg_verify_complete, False,
+                              'gpg not found — please install GnuPG')
+                return
+            except Exception as e:
+                GLib.idle_add(self._on_gpg_verify_complete, False, f'Key import error: {e}')
+                return
+
+        # Verify signature
+        try:
+            result = subprocess.run(
+                ['gpg', '--verify', self.sig_file_path, self.iso_path],
+                capture_output=True, text=True, timeout=120,
+            )
+        except FileNotFoundError:
+            GLib.idle_add(self._on_gpg_verify_complete, False,
+                          'gpg not found — please install GnuPG')
+            return
+        except Exception as e:
+            GLib.idle_add(self._on_gpg_verify_complete, False, f'Verification error: {e}')
+            return
+
+        # gpg --verify outputs to stderr
+        output = result.stderr.strip()
+
+        # Strip "gpg: " prefixes for cleaner display
+        clean_lines = []
+        for line in output.split('\n'):
+            stripped = line.strip()
+            if stripped.startswith('gpg: '):
+                stripped = stripped[5:]
+            if stripped:
+                clean_lines.append(stripped)
+        detail = '\n'.join(clean_lines) or ('Signature verified' if result.returncode == 0 else 'Verification failed')
+
+        GLib.idle_add(self._on_gpg_verify_complete, result.returncode == 0, detail)
+
+    def _on_gpg_verify_complete(self, success, detail):
+        """Update UI with GPG verification result on main thread."""
+        self.btn_gpg_verify.set_sensitive(True)
+        self.btn_sig_browse.set_sensitive(True)
+        self.btn_key_browse.set_sensitive(True)
+        self.gpg_spinner.stop()
+        self.gpg_spinner.set_visible(False)
+
+        if success:
+            self.gpg_result_label.set_label(f'{detail}\n\nVERIFIED GOOD')
+            self.gpg_result_label.remove_css_class('error')
+            self.gpg_result_label.add_css_class('success')
+            self.gpg_verified = True
+            self.btn_next.set_sensitive(True)
+        else:
+            self.gpg_result_label.set_label(f'{detail}\n\nUNVERIFIED BAD')
+            self.gpg_result_label.remove_css_class('success')
+            self.gpg_result_label.add_css_class('error')
+            self.gpg_verified = False
+            self.btn_next.set_sensitive(False)
+        return False
+
     # ---- Drive selection page ----
 
     def _build_drive_page(self):
@@ -415,17 +1148,17 @@ class DDImagerApp(Adw.Application):
             margin_start=0,
             margin_end=0,
         )
-        warning_box.add_css_class('warning')
+        warning_box.add_css_class('warning-banner')
         warning_label = Gtk.Label(
             label='\u26a0  All data on the selected drive will be destroyed',
             halign=Gtk.Align.CENTER,
             hexpand=True,
-            margin_top=8,
-            margin_bottom=8,
+            margin_top=10,
+            margin_bottom=10,
             margin_start=12,
             margin_end=12,
         )
-        warning_label.add_css_class('warning')
+        warning_label.add_css_class('warning-banner')
         warning_box.append(warning_label)
         page.append(warning_box)
 
@@ -1069,6 +1802,9 @@ class DDImagerApp(Adw.Application):
         # Update header title to reflect the current step
         self.title_label.set_label(page_title)
 
+        # Update step indicator
+        self._update_step_indicator()
+
         # Back button: hidden on first page
         self.btn_back.set_visible(self.current_page > 0)
 
@@ -1087,7 +1823,9 @@ class DDImagerApp(Adw.Application):
         if page_name == 'select-iso':
             self.btn_next.set_sensitive(self.iso_path is not None)
         elif page_name == 'verify-checksum':
-            self.btn_next.set_sensitive(self.checksum_verified or self.checksum_skipped)
+            sha_ok = self.verify_mode == 'sha' and self.checksum_verified
+            gpg_ok = self.verify_mode == 'gpg' and self.gpg_verified
+            self.btn_next.set_sensitive(sha_ok or gpg_ok or self.checksum_skipped)
         elif page_name == 'select-drive':
             self.btn_next.set_sensitive(self.target_device is not None)
         else:
