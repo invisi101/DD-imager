@@ -1596,15 +1596,20 @@ class DDImagerApp(Adw.Application):
         """Unmount all partitions. Returns (success, error_message)."""
         try:
             result = subprocess.run(
-                ['lsblk', '-nro', 'MOUNTPOINT', device_path],
+                ['lsblk', '-nro', 'NAME,MOUNTPOINT', device_path],
                 capture_output=True, text=True, timeout=10,
             )
-            for mp in result.stdout.strip().split('\n'):
-                if not mp:
+            for line in result.stdout.strip().split('\n'):
+                if not line.strip():
                     continue
+                parts = line.split(None, 1)
+                if len(parts) < 2 or not parts[1].strip():
+                    continue
+                part_name, mp = parts[0], parts[1].strip()
+                part_dev = f'/dev/{part_name}'
                 # Try udisksctl first (works for user-mounted)
                 r = subprocess.run(
-                    ['udisksctl', 'unmount', '-b', device_path, '--no-user-interaction'],
+                    ['udisksctl', 'unmount', '-b', part_dev, '--no-user-interaction'],
                     capture_output=True, text=True, timeout=30,
                 )
                 if r.returncode != 0:
@@ -1618,6 +1623,8 @@ class DDImagerApp(Adw.Application):
 
     def _start_write(self):
         """Begin the dd write process."""
+        if self.dd_process is not None:
+            return
         self.write_cancelled = False
 
         # Switch UI to progress mode
@@ -1867,6 +1874,7 @@ class DDImagerApp(Adw.Application):
     def _on_mode_selected(self, mode):
         """Set the app mode and navigate to the first wizard page."""
         self.app_mode = mode
+        self.target_device = None
         pages = self._get_pages()
         self.current_page = 0
         self.completed = [False] * len(pages)
@@ -2365,6 +2373,8 @@ class DDImagerApp(Adw.Application):
 
     def _start_wipe(self):
         """Begin the wipe process."""
+        if self.dd_process is not None:
+            return
         self.wipe_cancelled = False
         self.wipe_progress_box.set_visible(True)
         self.wipe_progress_bar.set_fraction(0.0)
@@ -2541,7 +2551,8 @@ class DDImagerApp(Adw.Application):
             GLib.idle_add(self._on_wipe_error, f'Partitioning failed: {e}')
             return False
 
-        partition = f'{device_path}1'
+        # mmcblk0 -> mmcblk0p1, sdb -> sdb1
+        partition = f'{device_path}p1' if device_path[-1].isdigit() else f'{device_path}1'
 
         fmt_cmds = {
             'fat32': ['pkexec', 'mkfs.vfat', '-F', '32', partition],
