@@ -2249,13 +2249,413 @@ class DDImagerApp(Adw.Application):
             self.wipe_format = key
 
     def _build_wipe_confirm_page(self):
-        return Gtk.Box()
+        """Build the wipe confirmation page with summary, progress, and result."""
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=16,
+            margin_top=24, margin_bottom=24, margin_start=24, margin_end=24,
+            vexpand=True,
+        )
+
+        heading = Gtk.Label(label='Review & Wipe', halign=Gtk.Align.START)
+        heading.add_css_class('title-2')
+        content.append(heading)
+
+        # Summary card
+        summary_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        summary_box.add_css_class('card')
+        summary_inner = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=12,
+            margin_top=16, margin_bottom=16, margin_start=16, margin_end=16,
+        )
+
+        drive_heading = Gtk.Label(label='Target Drive', halign=Gtk.Align.START)
+        drive_heading.add_css_class('heading')
+        summary_inner.append(drive_heading)
+
+        self.wipe_confirm_drive_label = Gtk.Label(
+            label='No drive selected', halign=Gtk.Align.START,
+            wrap=True, max_width_chars=60,
+        )
+        self.wipe_confirm_drive_label.add_css_class('dim-label')
+        summary_inner.append(self.wipe_confirm_drive_label)
+
+        summary_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        method_heading = Gtk.Label(label='Wipe Method', halign=Gtk.Align.START)
+        method_heading.add_css_class('heading')
+        summary_inner.append(method_heading)
+
+        self.wipe_confirm_method_label = Gtk.Label(label='', halign=Gtk.Align.START)
+        summary_inner.append(self.wipe_confirm_method_label)
+
+        summary_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        format_heading = Gtk.Label(label='After Wipe', halign=Gtk.Align.START)
+        format_heading.add_css_class('heading')
+        summary_inner.append(format_heading)
+
+        self.wipe_confirm_format_label = Gtk.Label(label='', halign=Gtk.Align.START)
+        summary_inner.append(self.wipe_confirm_format_label)
+
+        summary_box.append(summary_inner)
+        content.append(summary_box)
+
+        # Progress section (hidden until wipe starts)
+        self.wipe_progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.wipe_progress_box.set_visible(False)
+
+        self.wipe_progress_bar = Gtk.ProgressBar()
+        self.wipe_progress_bar.set_show_text(True)
+        self.wipe_progress_box.append(self.wipe_progress_bar)
+
+        self.wipe_progress_label = Gtk.Label(label='', halign=Gtk.Align.START)
+        self.wipe_progress_label.add_css_class('dim-label')
+        self.wipe_progress_label.set_wrap(True)
+        self.wipe_progress_label.set_max_width_chars(60)
+        self.wipe_progress_box.append(self.wipe_progress_label)
+
+        self.btn_cancel_wipe = Gtk.Button(label='Cancel')
+        self.btn_cancel_wipe.add_css_class('pill')
+        self.btn_cancel_wipe.add_css_class('destructive-action')
+        self.btn_cancel_wipe.set_halign(Gtk.Align.CENTER)
+        self.btn_cancel_wipe.connect('clicked', self._on_cancel_wipe)
+        self.wipe_progress_box.append(self.btn_cancel_wipe)
+
+        content.append(self.wipe_progress_box)
+
+        # Result label
+        self.wipe_result_label = Gtk.Label(label='', halign=Gtk.Align.CENTER)
+        self.wipe_result_label.set_wrap(True)
+        self.wipe_result_label.set_max_width_chars(60)
+        self.wipe_result_label.set_visible(False)
+        content.append(self.wipe_result_label)
+
+        page.append(content)
+        return page
 
     def _confirm_wipe(self):
-        pass
+        """Show a confirmation dialog before starting the wipe."""
+        if not self.target_device:
+            return
+
+        dev = self.target_device
+        label_part = f' ({dev["label"]})' if dev.get('label') else ''
+
+        dialog = Adw.AlertDialog(
+            heading='Confirm Secure Wipe',
+            body=(
+                f'This will PERMANENTLY DESTROY all data on {dev["device"]}{label_part}.\n\n'
+                'This cannot be undone. Are you absolutely sure?'
+            ),
+        )
+        dialog.add_response('cancel', 'Cancel')
+        dialog.add_response('wipe', 'Wipe')
+        dialog.set_response_appearance('wipe', Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response('cancel')
+        dialog.set_close_response('cancel')
+        dialog.connect('response', self._on_wipe_confirm_response)
+        dialog.present(self.win)
+
+    def _on_wipe_confirm_response(self, dialog, response):
+        if response == 'wipe':
+            self._start_wipe()
+
+    def _start_wipe(self):
+        """Begin the wipe process."""
+        self.wipe_cancelled = False
+        self.wipe_progress_box.set_visible(True)
+        self.wipe_progress_bar.set_fraction(0.0)
+        self.wipe_progress_bar.set_text('0%')
+        self.wipe_progress_label.set_label('Starting wipe...')
+        self.btn_cancel_wipe.set_sensitive(True)
+        self.btn_cancel_wipe.set_visible(True)
+        self.wipe_result_label.set_visible(False)
+        self.wipe_result_label.set_label('')
+        self.wipe_result_label.remove_css_class('success')
+        self.wipe_result_label.remove_css_class('error')
+        self.btn_next.set_visible(False)
+        self.btn_back.set_sensitive(False)
+
+        thread = threading.Thread(target=self._wipe_thread, daemon=True)
+        thread.start()
+
+    def _wipe_thread(self):
+        """Run the wipe operation in a background thread."""
+        device_path = self.target_device['device']
+        device_size = self.target_device['size']
+
+        # Safety checks
+        name = os.path.basename(device_path)
+        sys_path = Path(f'/sys/block/{name}')
+        if not sys_path.exists():
+            GLib.idle_add(self._on_wipe_error, 'Device no longer exists')
+            return
+        try:
+            removable = (sys_path / 'removable').read_text().strip()
+            if removable != '1':
+                GLib.idle_add(self._on_wipe_error, 'Device is not marked as removable')
+                return
+            current_size = int((sys_path / 'size').read_text().strip()) * 512
+            if current_size != self.target_device['size']:
+                GLib.idle_add(self._on_wipe_error, 'Device size changed — possibly a different device')
+                return
+        except OSError as e:
+            GLib.idle_add(self._on_wipe_error, f'Cannot verify device: {e}')
+            return
+
+        # Unmount
+        success, err = self._unmount_device(device_path)
+        if not success:
+            GLib.idle_add(self._on_wipe_error, f'Failed to unmount: {err}')
+            return
+
+        # Determine passes
+        if self.wipe_method == 'zero':
+            passes = [('/dev/zero', 'Zeroing')]
+        elif self.wipe_method == 'random':
+            passes = [('/dev/urandom', 'Writing random data')]
+        else:  # multipass
+            passes = [
+                ('/dev/zero', 'Pass 1/3: Zeros'),
+                ('ones', 'Pass 2/3: Ones'),
+                ('/dev/urandom', 'Pass 3/3: Random'),
+            ]
+
+        total_passes = len(passes)
+
+        for pass_idx, (source, label) in enumerate(passes):
+            if self.wipe_cancelled:
+                GLib.idle_add(self._on_wipe_cancelled)
+                return
+
+            GLib.idle_add(self._update_wipe_pass_label, label, pass_idx + 1, total_passes)
+
+            # For "ones" pass, use tr to convert zeros to 0xFF
+            if source == 'ones':
+                dd_cmd = [
+                    'pkexec', 'bash', '-c',
+                    f"tr '\\0' '\\377' < /dev/zero | dd of={device_path} bs=4M status=progress oflag=sync conv=fsync 2>&1"
+                ]
+            else:
+                dd_cmd = [
+                    'pkexec', 'dd',
+                    f'if={source}',
+                    f'of={device_path}',
+                    'bs=4M',
+                    'status=progress',
+                    'oflag=sync',
+                    'conv=fsync',
+                ]
+
+            try:
+                self.dd_process = subprocess.Popen(
+                    dd_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+            except OSError as e:
+                GLib.idle_add(self._on_wipe_error, f'Failed to start wipe: {e}')
+                return
+
+            pattern = re.compile(r'(\d+)\s+bytes')
+            stderr_fd = self.dd_process.stderr.fileno()
+            buf = ''
+            while True:
+                try:
+                    chunk = os.read(stderr_fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                buf += chunk.decode('utf-8', errors='replace')
+                while '\r' in buf or '\n' in buf:
+                    r_idx = buf.find('\r')
+                    n_idx = buf.find('\n')
+                    if r_idx == -1:
+                        idx = n_idx
+                    elif n_idx == -1:
+                        idx = r_idx
+                    else:
+                        idx = min(r_idx, n_idx)
+                    line = buf[:idx]
+                    buf = buf[idx + 1:]
+                    if line.strip():
+                        match = pattern.search(line)
+                        if match and not self.wipe_cancelled:
+                            bytes_written = int(match.group(1))
+                            pass_fraction = min(bytes_written / device_size, 1.0) if device_size > 0 else 0
+                            overall = (pass_idx + pass_fraction) / total_passes
+                            GLib.idle_add(self._update_wipe_progress, overall, bytes_written, device_size, line.strip())
+
+            self.dd_process.wait()
+            self.dd_process = None
+
+            if self.wipe_cancelled:
+                GLib.idle_add(self._on_wipe_cancelled)
+                return
+
+        # Post-wipe formatting
+        if self.wipe_format != 'raw':
+            GLib.idle_add(self._update_wipe_pass_label, 'Formatting...', 0, 0)
+            fmt_success = self._format_device(device_path)
+            if not fmt_success:
+                return
+
+        try:
+            subprocess.run(['sync'], timeout=60)
+        except Exception:
+            pass
+
+        GLib.idle_add(self._on_wipe_success)
+
+    def _format_device(self, device_path):
+        """Create partition table and filesystem. Returns True on success."""
+        try:
+            result = subprocess.run(
+                ['pkexec', 'parted', '-s', device_path, 'mklabel', 'msdos',
+                 'mkpart', 'primary', '0%', '100%'],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                GLib.idle_add(self._on_wipe_error, f'Partitioning failed: {result.stderr.strip()}')
+                return False
+        except Exception as e:
+            GLib.idle_add(self._on_wipe_error, f'Partitioning failed: {e}')
+            return False
+
+        partition = f'{device_path}1'
+
+        fmt_cmds = {
+            'fat32': ['pkexec', 'mkfs.vfat', '-F', '32', partition],
+            'exfat': ['pkexec', 'mkfs.exfat', partition],
+            'ext4': ['pkexec', 'mkfs.ext4', '-F', partition],
+            'ntfs': ['pkexec', 'mkfs.ntfs', '-f', partition],
+        }
+
+        cmd = fmt_cmds.get(self.wipe_format)
+        if not cmd:
+            return True
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                GLib.idle_add(self._on_wipe_error, f'Formatting failed: {result.stderr.strip()}')
+                return False
+        except Exception as e:
+            GLib.idle_add(self._on_wipe_error, f'Formatting failed: {e}')
+            return False
+
+        return True
+
+    def _update_wipe_pass_label(self, label, pass_num, total):
+        if total > 0:
+            self.wipe_progress_label.set_label(f'{label} ({pass_num}/{total})')
+        else:
+            self.wipe_progress_label.set_label(label)
+        return False
+
+    def _update_wipe_progress(self, fraction, bytes_written, total_size, detail_line):
+        self.wipe_progress_bar.set_fraction(fraction)
+        self.wipe_progress_bar.set_text(f'{fraction:.0%}')
+
+        written_str = format_file_size(bytes_written)
+        total_str = format_file_size(total_size) if total_size > 0 else '?'
+
+        speed_match = re.search(r'[\d.]+ [KMGT]?B/s', detail_line)
+        speed_part = f'  —  {speed_match.group(0)}' if speed_match else ''
+
+        current_label = self.wipe_progress_label.get_label()
+        pass_info = current_label.split('(')[0].strip() if '(' in current_label else current_label
+        self.wipe_progress_label.set_label(f'{pass_info} — {written_str} / {total_str}{speed_part}')
+        return False
+
+    def _on_cancel_wipe(self, _button):
+        self.wipe_cancelled = True
+        self.btn_cancel_wipe.set_sensitive(False)
+        self.wipe_progress_label.set_label('Cancelling...')
+        proc = self.dd_process
+        if proc is not None:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (ProcessLookupError, OSError, AttributeError):
+                pass
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+
+    def _on_wipe_success(self):
+        self.wipe_progress_bar.set_fraction(1.0)
+        self.wipe_progress_bar.set_text('100%')
+        self.wipe_progress_label.set_label('Wipe complete.')
+        self.btn_cancel_wipe.set_visible(False)
+
+        fmt_msg = ''
+        if self.wipe_format != 'raw':
+            fmt_names = {'fat32': 'FAT32', 'exfat': 'exFAT', 'ext4': 'ext4', 'ntfs': 'NTFS'}
+            fmt_msg = f'\nFormatted as {fmt_names.get(self.wipe_format, self.wipe_format)}.'
+
+        self.wipe_result_label.set_label(f'Drive securely wiped.{fmt_msg}')
+        self.wipe_result_label.remove_css_class('error')
+        self.wipe_result_label.add_css_class('success')
+        self.wipe_result_label.set_visible(True)
+        self.btn_back.set_sensitive(True)
+        return False
+
+    def _on_wipe_error(self, error_msg):
+        self.wipe_progress_label.set_label('Wipe failed.')
+        self.btn_cancel_wipe.set_visible(False)
+        self.wipe_result_label.set_label(f'Error: {error_msg}')
+        self.wipe_result_label.remove_css_class('success')
+        self.wipe_result_label.add_css_class('error')
+        self.wipe_result_label.set_visible(True)
+        self.btn_back.set_sensitive(True)
+        self.btn_next.set_visible(True)
+        return False
+
+    def _on_wipe_cancelled(self):
+        self.wipe_progress_label.set_label('Wipe cancelled.')
+        self.btn_cancel_wipe.set_visible(False)
+        self.wipe_result_label.set_label('Wipe was cancelled by user.')
+        self.wipe_result_label.remove_css_class('success')
+        self.wipe_result_label.add_css_class('error')
+        self.wipe_result_label.set_visible(True)
+        self.btn_back.set_sensitive(True)
+        self.btn_next.set_visible(True)
+        return False
 
     def _update_wipe_summary(self):
-        pass
+        """Populate the summary labels on the wipe confirm page."""
+        self.wipe_result_label.set_visible(False)
+        self.wipe_result_label.remove_css_class('error')
+        self.wipe_result_label.remove_css_class('success')
+
+        if self.target_device:
+            dev = self.target_device
+            vendor_model = ' '.join(filter(None, [dev.get('vendor', ''), dev.get('model', '')]))
+            parts = [dev['device']]
+            if vendor_model and vendor_model != 'Mass Storage':
+                parts.append(vendor_model)
+            if dev.get('label'):
+                parts.append(dev['label'])
+            size_str = format_file_size(dev['size'])
+            self.wipe_confirm_drive_label.set_label(f'{" — ".join(parts)}  ({size_str})')
+            self.wipe_confirm_drive_label.remove_css_class('dim-label')
+
+        method_names = {'zero': 'Zero fill', 'random': 'Random fill', 'multipass': 'Multi-pass (3 passes)'}
+        self.wipe_confirm_method_label.set_label(method_names.get(self.wipe_method, self.wipe_method))
+
+        format_names = {
+            'raw': 'Leave raw (no filesystem)',
+            'fat32': 'Format as FAT32',
+            'exfat': 'Format as exFAT',
+            'ext4': 'Format as ext4',
+            'ntfs': 'Format as NTFS',
+        }
+        self.wipe_confirm_format_label.set_label(format_names.get(self.wipe_format, self.wipe_format))
 
 
 if __name__ == '__main__':
