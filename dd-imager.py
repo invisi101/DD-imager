@@ -2,7 +2,10 @@
 """DD-imager — Safe USB image writer."""
 
 import hashlib
+import json
+import subprocess
 import threading
+from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -27,6 +30,58 @@ def format_file_size(size_bytes):
         size_bytes /= 1024
 
 
+def get_removable_drives():
+    """Detect removable USB drives by reading sysfs and lsblk."""
+    drives = []
+    for dev in sorted(Path('/sys/block').iterdir()):
+        name = dev.name
+        if any(name.startswith(p) for p in ('loop', 'ram', 'zram', 'dm-', 'sr', 'nvme')):
+            continue
+        try:
+            removable = (dev / 'removable').read_text().strip()
+        except OSError:
+            continue
+        if removable != '1':
+            continue
+        size_sectors = int((dev / 'size').read_text().strip())
+        size_bytes = size_sectors * 512
+        if size_bytes == 0:
+            continue
+        device_path = f'/dev/{name}'
+        # Get label and mount info from lsblk
+        try:
+            result = subprocess.run(
+                ['lsblk', '-Jno', 'NAME,LABEL,SIZE,MOUNTPOINT', device_path],
+                capture_output=True, text=True, timeout=5
+            )
+            info = json.loads(result.stdout)
+            # Extract label and mount points from lsblk output
+            label = ''
+            mounts = []
+            for bd in info.get('blockdevices', []):
+                if bd.get('label'):
+                    label = bd['label']
+                if bd.get('mountpoint'):
+                    mounts.append(bd['mountpoint'])
+                for child in bd.get('children', []):
+                    if child.get('label'):
+                        label = label or child['label']
+                    if child.get('mountpoint'):
+                        mounts.append(child['mountpoint'])
+        except Exception:
+            label = ''
+            mounts = []
+
+        drives.append({
+            'device': device_path,
+            'name': name,
+            'size': size_bytes,
+            'label': label,
+            'mounted': mounts,
+        })
+    return drives
+
+
 class DDImagerApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id='com.invisi101.dd-imager')
@@ -46,6 +101,7 @@ class DDImagerApp(Adw.Application):
         self.current_page = 0
         self.completed = [False] * len(PAGES)
         self.checksum_verified = False
+        self.target_device = None
 
         # --- Header bar ---
         self.header = Adw.HeaderBar()
@@ -80,8 +136,11 @@ class DDImagerApp(Adw.Application):
         # Page 1: Verify Checksum (real implementation)
         self.stack.add_named(self._build_checksum_page(), 'verify-checksum')
 
-        # Pages 2–3: placeholders
-        for name, _title, label_text in PAGES[2:]:
+        # Page 2: Select Drive (real implementation)
+        self.stack.add_named(self._build_drive_page(), 'select-drive')
+
+        # Pages 3+: placeholders
+        for name, _title, label_text in PAGES[3:]:
             page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
                                halign=Gtk.Align.CENTER,
                                valign=Gtk.Align.CENTER)
@@ -323,6 +382,178 @@ class DDImagerApp(Adw.Application):
         self.checksum_result_label.remove_css_class('success')
         self.checksum_result_label.add_css_class('error')
 
+    # ---- Drive selection page ----
+
+    def _build_drive_page(self):
+        """Build the Select Drive page with warning banner, drive list, and refresh button."""
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0,
+        )
+
+        # Warning banner at the top
+        warning_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.FILL,
+            margin_top=0,
+            margin_start=0,
+            margin_end=0,
+        )
+        warning_box.add_css_class('warning')
+        warning_label = Gtk.Label(
+            label='\u26a0  All data on the selected drive will be destroyed',
+            halign=Gtk.Align.CENTER,
+            hexpand=True,
+            margin_top=8,
+            margin_bottom=8,
+            margin_start=12,
+            margin_end=12,
+        )
+        warning_label.add_css_class('warning')
+        warning_box.append(warning_label)
+        page.append(warning_box)
+
+        # Content area with margins
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            margin_top=16,
+            margin_bottom=16,
+            margin_start=24,
+            margin_end=24,
+            vexpand=True,
+        )
+
+        heading = Gtk.Label(label='Select target drive', halign=Gtk.Align.START)
+        heading.add_css_class('title-2')
+        content.append(heading)
+
+        # Scrolled window containing the ListBox
+        scrolled = Gtk.ScrolledWindow(
+            vexpand=True,
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+        )
+        scrolled.add_css_class('card')
+
+        self.drive_listbox = Gtk.ListBox()
+        self.drive_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.drive_listbox.add_css_class('boxed-list')
+        self.drive_listbox.connect('row-selected', self._on_drive_selected)
+        scrolled.set_child(self.drive_listbox)
+        content.append(scrolled)
+
+        # Empty-state label (shown when no drives found)
+        self.drive_empty_label = Gtk.Label(
+            label='No removable USB drives detected. Insert a drive and click Refresh.',
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+            vexpand=True,
+            wrap=True,
+            max_width_chars=50,
+        )
+        self.drive_empty_label.add_css_class('dim-label')
+        self.drive_empty_label.set_visible(False)
+        content.append(self.drive_empty_label)
+
+        # Refresh button
+        btn_refresh = Gtk.Button(label='Refresh', halign=Gtk.Align.CENTER)
+        btn_refresh.add_css_class('pill')
+        btn_refresh.connect('clicked', lambda _b: self._refresh_drives())
+        content.append(btn_refresh)
+
+        page.append(content)
+
+        return page
+
+    def _refresh_drives(self):
+        """Rescan for removable USB drives and repopulate the list."""
+        # Clear current selection
+        self.target_device = None
+        self.btn_next.set_sensitive(False)
+
+        # Remove all existing rows
+        while True:
+            row = self.drive_listbox.get_row_at_index(0)
+            if row is None:
+                break
+            self.drive_listbox.remove(row)
+
+        # Detect drives
+        drives = get_removable_drives()
+
+        if not drives:
+            self.drive_listbox.set_visible(False)
+            self.drive_empty_label.set_visible(True)
+            return
+
+        self.drive_listbox.set_visible(True)
+        self.drive_empty_label.set_visible(False)
+
+        for drive in drives:
+            row = self._make_drive_row(drive)
+            self.drive_listbox.append(row)
+
+    def _make_drive_row(self, drive):
+        """Create a ListBox row for a single drive."""
+        row = Gtk.ListBoxRow()
+        row.drive_info = drive  # stash drive info on the row
+
+        hbox = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12,
+            margin_top=10,
+            margin_bottom=10,
+            margin_start=12,
+            margin_end=12,
+        )
+
+        # Left side: device path (bold) and label
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+
+        device_label = Gtk.Label(halign=Gtk.Align.START)
+        device_label.set_markup(f'<b>{GLib.markup_escape_text(drive["device"])}</b>')
+        left.append(device_label)
+
+        if drive['label']:
+            label_text = Gtk.Label(
+                label=drive['label'],
+                halign=Gtk.Align.START,
+            )
+            label_text.add_css_class('dim-label')
+            left.append(label_text)
+
+        if drive['mounted']:
+            mount_text = Gtk.Label(
+                label='Mounted: ' + ', '.join(drive['mounted']),
+                halign=Gtk.Align.START,
+            )
+            mount_text.add_css_class('dim-label')
+            mount_text.add_css_class('caption')
+            left.append(mount_text)
+
+        hbox.append(left)
+
+        # Right side: size
+        size_label = Gtk.Label(
+            label=format_file_size(drive['size']),
+            halign=Gtk.Align.END,
+            valign=Gtk.Align.CENTER,
+        )
+        size_label.add_css_class('dim-label')
+        hbox.append(size_label)
+
+        row.set_child(hbox)
+        return row
+
+    def _on_drive_selected(self, listbox, row):
+        """Handle drive selection from the ListBox."""
+        if row is not None:
+            self.target_device = row.drive_info
+            self.btn_next.set_sensitive(True)
+        else:
+            self.target_device = None
+            self.btn_next.set_sensitive(False)
+
     # ---- Navigation logic ----
 
     def go_next(self):
@@ -347,6 +578,8 @@ class DDImagerApp(Adw.Application):
         page_name = PAGES[self.current_page][0]
         if page_name == 'verify-checksum':
             self._update_checksum_file_info()
+        elif page_name == 'select-drive':
+            self._refresh_drives()
 
     def update_nav_buttons(self):
         """Update button visibility, sensitivity, and labels for the current page."""
@@ -375,6 +608,8 @@ class DDImagerApp(Adw.Application):
             self.btn_next.set_sensitive(self.iso_path is not None)
         elif page_name == 'verify-checksum':
             self.btn_next.set_sensitive(self.checksum_verified)
+        elif page_name == 'select-drive':
+            self.btn_next.set_sensitive(self.target_device is not None)
         else:
             self.btn_next.set_sensitive(True)
 
