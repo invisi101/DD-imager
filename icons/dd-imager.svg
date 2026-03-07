@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="usb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f472b6"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#34d399"/>
+      <stop offset="100%" style="stop-color:#06b6d4"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-strong">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#bg)" stroke="#2d2d5e" stroke-width="2"/>
+  <!-- USB drive body -->
+  <rect x="38" y="36" width="52" height="40" rx="6" fill="none" stroke="url(#usb)" stroke-width="3" filter="url(#glow)"/>
+  <!-- USB connector -->
+  <rect x="48" y="24" width="12" height="16" rx="2" fill="none" stroke="url(#usb)" stroke-width="2.5" filter="url(#glow)"/>
+  <rect x="68" y="24" width="12" height="16" rx="2" fill="none" stroke="url(#usb)" stroke-width="2.5" filter="url(#glow)"/>
+  <!-- Arrow pointing down into USB -->
+  <path d="M64 50 L64 66" stroke="url(#arrow)" stroke-width="3.5" stroke-linecap="round" filter="url(#glow-strong)"/>
+  <path d="M56 60 L64 68 L72 60" stroke="url(#arrow)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow-strong)"/>
+  <!-- DD text -->
+  <text x="64" y="102" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="22" fill="url(#usb)" filter="url(#glow)">DD</text>
+</svg>
