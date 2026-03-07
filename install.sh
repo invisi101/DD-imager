@@ -7,16 +7,16 @@ echo "Installing DD-imager..."
 install_deps() {
     if command -v pacman &>/dev/null; then
         echo "Detected Arch Linux"
-        sudo pacman -S --needed --noconfirm python python-gobject gtk4 libadwaita udisks2
+        sudo pacman -S --needed --noconfirm python python-gobject gtk4 libadwaita udisks2 parted dosfstools exfatprogs ntfs-3g
     elif command -v apt &>/dev/null; then
         echo "Detected Debian/Ubuntu"
-        sudo apt install -y python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 udisks2
+        sudo apt install -y python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 udisks2 parted dosfstools exfatprogs ntfs-3g
     elif command -v dnf &>/dev/null; then
         echo "Detected Fedora"
-        sudo dnf install -y python3 python3-gobject gtk4 libadwaita udisks2
+        sudo dnf install -y python3 python3-gobject gtk4 libadwaita udisks2 parted dosfstools exfatprogs ntfs-3g
     else
         echo "Could not detect package manager. Please install these manually:"
-        echo "  python3, python-gobject, gtk4, libadwaita, udisks2"
+        echo "  python3, python-gobject, gtk4, libadwaita, udisks2, parted, dosfstools, exfatprogs, ntfs-3g"
         exit 1
     fi
 }

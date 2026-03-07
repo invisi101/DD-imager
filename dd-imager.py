@@ -409,16 +409,17 @@ dialog {
 .wipe-section-heading {
     color: #f472b6;
     font-weight: 600;
-    font-size: 13px;
-    margin-top: 8px;
+    font-size: 15px;
+    margin-top: 12px;
 }
 
 .wipe-option-box {
     background-color: #16213e;
     border: 1px solid #2d2d5e;
     border-radius: 10px;
-    padding: 12px 16px;
+    padding: 16px 20px;
     transition: all 200ms ease;
+    min-width: 340px;
 }
 
 .wipe-option-box:checked {
@@ -430,12 +431,12 @@ dialog {
 .wipe-option-title {
     color: #e0e0ff;
     font-weight: 600;
-    font-size: 13px;
+    font-size: 15px;
 }
 
 .wipe-option-desc {
     color: alpha(#c4c4f0, 0.6);
-    font-size: 11px;
+    font-size: 13px;
 }
 """
 
@@ -549,7 +550,7 @@ class DDImagerApp(Adw.Application):
 
         # Mode state
         self.app_mode = None  # 'write' or 'wipe', None = welcome screen
-        self.wipe_method = 'zero'  # 'zero', 'random', 'multipass'
+        self.wipe_method = 'quick'  # 'quick', 'zero', 'random', 'multipass'
         self.wipe_format = 'raw'   # 'raw', 'fat32', 'exfat', 'ext4', 'ntfs'
         self.wipe_cancelled = False
 
@@ -2143,40 +2144,37 @@ class DDImagerApp(Adw.Application):
         """Build the wipe options page with method and format selection."""
         page = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            halign=Gtk.Align.CENTER,
+            halign=Gtk.Align.FILL,
             valign=Gtk.Align.CENTER,
-            spacing=16,
+            spacing=12,
+            margin_start=32, margin_end=32,
         )
 
         heading = Gtk.Label(label='Wipe Options')
         heading.add_css_class('title-1')
         page.append(heading)
 
-        # Scrollable content for smaller screens
-        scrolled = Gtk.ScrolledWindow(
-            hscrollbar_policy=Gtk.PolicyType.NEVER,
-            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
-            max_content_height=380,
-            propagate_natural_height=True,
-        )
-
-        content = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL,
-            spacing=12,
+        # Two-column layout: method on left, format on right
+        columns = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=24,
             halign=Gtk.Align.CENTER,
-            margin_start=16, margin_end=16,
+            homogeneous=True,
         )
 
-        # --- Wipe Method ---
+        # --- Left column: Wipe Method ---
+        left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
         method_heading = Gtk.Label(label='WIPE METHOD', halign=Gtk.Align.START)
         method_heading.add_css_class('wipe-section-heading')
-        content.append(method_heading)
+        left_col.append(method_heading)
 
         self.wipe_method_buttons = {}
         methods = [
-            ('zero', 'Zero fill', 'Write zeros to every byte. Fast. Sufficient for flash/SSD drives.'),
-            ('random', 'Random fill', 'Write random data from /dev/urandom. Preferred for magnetic hard drives.'),
-            ('multipass', 'Multi-pass', '3 passes: zeros, ones, random. Maximum security. Slowest.'),
+            ('quick', 'Quick erase', 'Delete partition table only. Fast but data may be recoverable.'),
+            ('zero', 'Zero fill', 'Write zeros to every byte. Sufficient for flash/SSD.'),
+            ('random', 'Random fill', 'Random data from /dev/urandom. Best for magnetic drives.'),
+            ('multipass', 'Multi-pass', '3 passes: zeros, ones, random. Maximum security.'),
         ]
 
         first_method_btn = None
@@ -2189,7 +2187,7 @@ class DDImagerApp(Adw.Application):
             title_lbl = Gtk.Label(label=title, halign=Gtk.Align.START)
             title_lbl.add_css_class('wipe-option-title')
             box.append(title_lbl)
-            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=50)
+            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=40)
             desc_lbl.add_css_class('wipe-option-desc')
             box.append(desc_lbl)
             btn.set_child(box)
@@ -2201,21 +2199,25 @@ class DDImagerApp(Adw.Application):
                 btn.set_group(first_method_btn)
 
             btn.connect('toggled', self._on_wipe_method_changed, key)
-            content.append(btn)
+            left_col.append(btn)
             self.wipe_method_buttons[key] = btn
 
-        # --- Post-Wipe Format ---
+        columns.append(left_col)
+
+        # --- Right column: Post-Wipe Format ---
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
         format_heading = Gtk.Label(label='AFTER WIPE', halign=Gtk.Align.START)
         format_heading.add_css_class('wipe-section-heading')
-        content.append(format_heading)
+        right_col.append(format_heading)
 
         self.wipe_format_buttons = {}
         formats = [
-            ('raw', 'Leave raw', 'No partition table or filesystem. Drive will appear unformatted.'),
-            ('fat32', 'Format FAT32', 'Universal compatibility. Windows, Mac, Linux. Max file size 4 GB.'),
-            ('exfat', 'Format exFAT', 'Modern USB drives. Windows, Mac, Linux. No file size limit.'),
-            ('ext4', 'Format ext4', 'Linux only. Best for Linux-exclusive drives. Supports permissions.'),
-            ('ntfs', 'Format NTFS', 'Windows drives. Linux read/write with ntfs-3g. No Mac write support.'),
+            ('raw', 'Leave raw', 'No filesystem. Drive will appear unformatted.'),
+            ('fat32', 'Format FAT32', 'Universal. Windows, Mac, Linux. Max 4 GB files.'),
+            ('exfat', 'Format exFAT', 'Modern USB. Windows, Mac, Linux. No size limit.'),
+            ('ext4', 'Format ext4', 'Linux only. Supports permissions.'),
+            ('ntfs', 'Format NTFS', 'Windows. Linux read/write via ntfs-3g.'),
         ]
 
         first_format_btn = None
@@ -2228,7 +2230,7 @@ class DDImagerApp(Adw.Application):
             title_lbl = Gtk.Label(label=title, halign=Gtk.Align.START)
             title_lbl.add_css_class('wipe-option-title')
             box.append(title_lbl)
-            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=50)
+            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=40)
             desc_lbl.add_css_class('wipe-option-desc')
             box.append(desc_lbl)
             btn.set_child(box)
@@ -2240,11 +2242,29 @@ class DDImagerApp(Adw.Application):
                 btn.set_group(first_format_btn)
 
             btn.connect('toggled', self._on_wipe_format_changed, key)
-            content.append(btn)
+            right_col.append(btn)
             self.wipe_format_buttons[key] = btn
 
-        scrolled.set_child(content)
-        page.append(scrolled)
+        columns.append(right_col)
+        page.append(columns)
+
+        # Drive label entry (visible only when formatting)
+        self.wipe_label_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=12, halign=Gtk.Align.CENTER,
+            margin_top=4,
+        )
+        label_lbl = Gtk.Label(label='Drive name:')
+        label_lbl.add_css_class('wipe-option-title')
+        self.wipe_label_box.append(label_lbl)
+        self.wipe_label_entry = Gtk.Entry()
+        self.wipe_label_entry.set_placeholder_text('e.g. MY_USB')
+        self.wipe_label_entry.set_max_length(32)
+        self.wipe_label_entry.set_width_chars(20)
+        self.wipe_label_box.append(self.wipe_label_entry)
+        self.wipe_label_box.set_visible(False)  # hidden when 'raw' is selected
+        page.append(self.wipe_label_box)
+
         return page
 
     def _on_wipe_method_changed(self, button, key):
@@ -2256,6 +2276,7 @@ class DDImagerApp(Adw.Application):
         """Handle post-wipe format radio selection."""
         if button.get_active():
             self.wipe_format = key
+            self.wipe_label_box.set_visible(key != 'raw')
 
     def _build_wipe_confirm_page(self):
         """Build the wipe confirmation page with summary, progress, and result."""
@@ -2422,159 +2443,133 @@ class DDImagerApp(Adw.Application):
             GLib.idle_add(self._on_wipe_error, f'Failed to unmount: {err}')
             return
 
-        # Determine passes
-        if self.wipe_method == 'zero':
-            passes = [('/dev/zero', 'Zeroing')]
+        # Build a single shell script for all privileged operations (one pkexec prompt)
+        dev = shlex.quote(device_path)
+        script_lines = []
+
+        if self.wipe_method == 'quick':
+            script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Erasing partition table'")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=1M count=10 conv=fsync 2>&1 || true")
+        elif self.wipe_method == 'zero':
+            script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Zeroing'")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
         elif self.wipe_method == 'random':
-            passes = [('/dev/urandom', 'Writing random data')]
+            script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Writing random data'")
+            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
         else:  # multipass
-            passes = [
-                ('/dev/zero', 'Pass 1/3: Zeros'),
-                ('ones', 'Pass 2/3: Ones'),
-                ('/dev/urandom', 'Pass 3/3: Random'),
-            ]
-
-        total_passes = len(passes)
-
-        for pass_idx, (source, label) in enumerate(passes):
-            if self.wipe_cancelled:
-                GLib.idle_add(self._on_wipe_cancelled)
-                return
-
-            GLib.idle_add(self._update_wipe_pass_label, label, pass_idx + 1, total_passes)
-
-            # For "ones" pass, use tr to convert zeros to 0xFF
-            if source == 'ones':
-                dd_cmd = [
-                    'pkexec', 'bash', '-c',
-                    f"tr '\\0' '\\377' < /dev/zero | dd of={shlex.quote(device_path)} bs=4M status=progress oflag=sync conv=fsync 2>&1"
-                ]
-            else:
-                dd_cmd = [
-                    'pkexec', 'dd',
-                    f'if={source}',
-                    f'of={device_path}',
-                    'bs=4M',
-                    'status=progress',
-                    'oflag=sync',
-                    'conv=fsync',
-                ]
-
-            try:
-                self.dd_process = subprocess.Popen(
-                    dd_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    start_new_session=True,
-                )
-            except OSError as e:
-                GLib.idle_add(self._on_wipe_error, f'Failed to start wipe: {e}')
-                return
-
-            pattern = re.compile(r'(\d+)\s+bytes')
-            # Ones pass uses 2>&1 so progress arrives on stdout, not stderr
-            progress_fd = self.dd_process.stdout.fileno() if source == 'ones' else self.dd_process.stderr.fileno()
-            buf = ''
-            while True:
-                try:
-                    chunk = os.read(progress_fd, 4096)
-                except OSError:
-                    break
-                if not chunk:
-                    break
-                buf += chunk.decode('utf-8', errors='replace')
-                while '\r' in buf or '\n' in buf:
-                    r_idx = buf.find('\r')
-                    n_idx = buf.find('\n')
-                    if r_idx == -1:
-                        idx = n_idx
-                    elif n_idx == -1:
-                        idx = r_idx
-                    else:
-                        idx = min(r_idx, n_idx)
-                    line = buf[:idx]
-                    buf = buf[idx + 1:]
-                    if line.strip():
-                        match = pattern.search(line)
-                        if match and not self.wipe_cancelled:
-                            bytes_written = int(match.group(1))
-                            pass_fraction = min(bytes_written / device_size, 1.0) if device_size > 0 else 0
-                            overall = (pass_idx + pass_fraction) / total_passes
-                            GLib.idle_add(self._update_wipe_progress, overall, bytes_written, device_size, line.strip())
-
-            self.dd_process.wait()
-            returncode = self.dd_process.returncode
-            remaining_err = ''
-            try:
-                remaining_err = self.dd_process.stderr.read().decode('utf-8', errors='replace') if self.dd_process.stderr else ''
-            except Exception:
-                pass
-            self.dd_process = None
-
-            if self.wipe_cancelled:
-                GLib.idle_add(self._on_wipe_cancelled)
-                return
-
-            # dd exits non-zero when device is full (ENOSPC) — that's expected
-            if returncode != 0:
-                all_err = (buf + remaining_err).lower()
-                if 'no space left' not in all_err:
-                    GLib.idle_add(self._on_wipe_error, f'Wipe pass failed (exit code {returncode})')
-                    return
+            script_lines.append(f"echo 'DDIMAGER_PASS:1:3:Pass 1/3: Zeros'")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"echo 'DDIMAGER_PASS:2:3:Pass 2/3: Ones'")
+            script_lines.append(f"tr '\\0' '\\377' < /dev/zero | dd of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"echo 'DDIMAGER_PASS:3:3:Pass 3/3: Random'")
+            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
 
         # Post-wipe formatting
         if self.wipe_format != 'raw':
-            GLib.idle_add(self._update_wipe_pass_label, 'Formatting...', 0, 0)
-            fmt_success = self._format_device(device_path)
-            if not fmt_success:
-                return
+            # Quote the full partition path (not appending to already-quoted dev)
+            if device_path[-1].isdigit():
+                partition = shlex.quote(f'{device_path}p1')
+            else:
+                partition = shlex.quote(f'{device_path}1')
+            script_lines.append(f"echo 'DDIMAGER_FORMAT'")
+            script_lines.append(f"parted -s {dev} mklabel msdos mkpart primary 0% 100%")
+            drive_label = self.wipe_label_entry.get_text().strip()
+            label_arg = shlex.quote(drive_label) if drive_label else ''
+            fmt_cmds = {
+                'fat32': f'mkfs.vfat -F 32 {f"-n {label_arg} " if label_arg else ""}{partition}',
+                'exfat': f'mkfs.exfat {f"-L {label_arg} " if label_arg else ""}{partition}',
+                'ext4': f'mkfs.ext4 -F {f"-L {label_arg} " if label_arg else ""}{partition}',
+                'ntfs': f'mkfs.ntfs -f {f"-L {label_arg} " if label_arg else ""}{partition}',
+            }
+            if self.wipe_format in fmt_cmds:
+                script_lines.append(fmt_cmds[self.wipe_format])
+
+        script_lines.append("sync")
+        script_lines.append("echo 'DDIMAGER_DONE'")
+
+        script = '\n'.join(script_lines)
 
         try:
-            subprocess.run(['sync'], timeout=60)
-        except Exception:
-            pass
-
-        GLib.idle_add(self._on_wipe_success)
-
-    def _format_device(self, device_path):
-        """Create partition table and filesystem. Returns True on success."""
-        try:
-            result = subprocess.run(
-                ['pkexec', 'parted', '-s', device_path, 'mklabel', 'msdos',
-                 'mkpart', 'primary', '0%', '100%'],
-                capture_output=True, text=True, timeout=30,
+            self.dd_process = subprocess.Popen(
+                ['pkexec', 'bash', '-c', script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
             )
-            if result.returncode != 0:
-                GLib.idle_add(self._on_wipe_error, f'Partitioning failed: {result.stderr.strip()}')
-                return False
-        except Exception as e:
-            GLib.idle_add(self._on_wipe_error, f'Partitioning failed: {e}')
-            return False
+        except OSError as e:
+            GLib.idle_add(self._on_wipe_error, f'Failed to start wipe: {e}')
+            return
 
-        # mmcblk0 -> mmcblk0p1, sdb -> sdb1
-        partition = f'{device_path}p1' if device_path[-1].isdigit() else f'{device_path}1'
+        # Parse output: progress lines + DDIMAGER_ markers
+        pattern = re.compile(r'(\d+)\s+bytes')
+        marker_pattern = re.compile(r'DDIMAGER_PASS:(\d+):(\d+):(.*)')
+        pass_idx = 0
+        total_passes = 1
+        stdout_fd = self.dd_process.stdout.fileno()
+        buf = ''
+        success = False
 
-        fmt_cmds = {
-            'fat32': ['pkexec', 'mkfs.vfat', '-F', '32', partition],
-            'exfat': ['pkexec', 'mkfs.exfat', partition],
-            'ext4': ['pkexec', 'mkfs.ext4', '-F', partition],
-            'ntfs': ['pkexec', 'mkfs.ntfs', '-f', partition],
-        }
+        while True:
+            try:
+                chunk = os.read(stdout_fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk.decode('utf-8', errors='replace')
+            while '\r' in buf or '\n' in buf:
+                r_idx = buf.find('\r')
+                n_idx = buf.find('\n')
+                if r_idx == -1:
+                    idx = n_idx
+                elif n_idx == -1:
+                    idx = r_idx
+                else:
+                    idx = min(r_idx, n_idx)
+                line = buf[:idx]
+                buf = buf[idx + 1:]
+                if not line.strip():
+                    continue
 
-        cmd = fmt_cmds.get(self.wipe_format)
-        if not cmd:
-            return True
+                # Check for markers
+                m = marker_pattern.match(line.strip())
+                if m:
+                    pass_idx = int(m.group(1)) - 1
+                    total_passes = int(m.group(2))
+                    pass_label = m.group(3)
+                    GLib.idle_add(self._update_wipe_pass_label, pass_label, pass_idx + 1, total_passes)
+                    continue
 
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            if result.returncode != 0:
-                GLib.idle_add(self._on_wipe_error, f'Formatting failed: {result.stderr.strip()}')
-                return False
-        except Exception as e:
-            GLib.idle_add(self._on_wipe_error, f'Formatting failed: {e}')
-            return False
+                if 'DDIMAGER_FORMAT' in line:
+                    GLib.idle_add(self._update_wipe_pass_label, 'Formatting...', 0, 0)
+                    continue
 
-        return True
+                if 'DDIMAGER_DONE' in line:
+                    success = True
+                    continue
+
+                # Progress from dd
+                match = pattern.search(line)
+                if match and not self.wipe_cancelled:
+                    bytes_written = int(match.group(1))
+                    pass_fraction = min(bytes_written / device_size, 1.0) if device_size > 0 else 0
+                    overall = (pass_idx + pass_fraction) / total_passes
+                    GLib.idle_add(self._update_wipe_progress, overall, bytes_written, device_size, line.strip())
+
+        self.dd_process.wait()
+        returncode = self.dd_process.returncode
+        self.dd_process = None
+
+        if self.wipe_cancelled:
+            GLib.idle_add(self._on_wipe_cancelled)
+            return
+
+        if success:
+            GLib.idle_add(self._on_wipe_success)
+        elif returncode != 0:
+            GLib.idle_add(self._on_wipe_error, f'Wipe failed (exit code {returncode})')
+        else:
+            GLib.idle_add(self._on_wipe_success)
 
     def _update_wipe_pass_label(self, label, pass_num, total):
         if total > 0:
@@ -2671,7 +2666,7 @@ class DDImagerApp(Adw.Application):
             self.wipe_confirm_drive_label.set_label(f'{" — ".join(parts)}  ({size_str})')
             self.wipe_confirm_drive_label.remove_css_class('dim-label')
 
-        method_names = {'zero': 'Zero fill', 'random': 'Random fill', 'multipass': 'Multi-pass (3 passes)'}
+        method_names = {'quick': 'Quick erase', 'zero': 'Zero fill', 'random': 'Random fill', 'multipass': 'Multi-pass (3 passes)'}
         self.wipe_confirm_method_label.set_label(method_names.get(self.wipe_method, self.wipe_method))
 
         format_names = {
@@ -2681,7 +2676,11 @@ class DDImagerApp(Adw.Application):
             'ext4': 'Format as ext4',
             'ntfs': 'Format as NTFS',
         }
-        self.wipe_confirm_format_label.set_label(format_names.get(self.wipe_format, self.wipe_format))
+        fmt_text = format_names.get(self.wipe_format, self.wipe_format)
+        drive_label = self.wipe_label_entry.get_text().strip()
+        if drive_label and self.wipe_format != 'raw':
+            fmt_text += f'  —  Label: {drive_label}'
+        self.wipe_confirm_format_label.set_label(fmt_text)
 
 
 if __name__ == '__main__':
