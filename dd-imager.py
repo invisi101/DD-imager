@@ -37,8 +37,8 @@ class DDImagerApp(Adw.Application):
 
         # --- Header bar ---
         self.header = Adw.HeaderBar()
-        self.header.set_title_widget(Gtk.Label(label='DD-imager',
-                                               css_classes=['title']))
+        self.title_label = Gtk.Label(label='DD-imager', css_classes=['title'])
+        self.header.set_title_widget(self.title_label)
 
         # Back button (left side)
         self.btn_back = Gtk.Button(label='Back')
@@ -104,8 +104,7 @@ class DDImagerApp(Adw.Application):
         page_title = PAGES[self.current_page][1]
 
         # Update header title to reflect the current step
-        self.header.set_title_widget(
-            Gtk.Label(label=page_title, css_classes=['title']))
+        self.title_label.set_label(page_title)
 
         # Back button: hidden on first page
         self.btn_back.set_visible(self.current_page > 0)
@@ -121,9 +120,8 @@ class DDImagerApp(Adw.Application):
             self.btn_next.set_label('Next')
             self.btn_next.remove_css_class('destructive-action')
 
-        # Next button is enabled (placeholder pages are always "ready")
-        # Later tasks will disable it until the page validates its input.
-        self.btn_next.set_sensitive(True)
+        # Next button: GTK buttons are sensitive by default.
+        # Each real page will call set_sensitive() as needed for validation.
 
 
 if __name__ == '__main__':
