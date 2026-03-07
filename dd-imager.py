@@ -6,6 +6,7 @@ import json
 import os
 import re
 import signal
+import stat
 import subprocess
 import threading
 from pathlib import Path
@@ -104,6 +105,7 @@ class DDImagerApp(Adw.Application):
         self.current_page = 0
         self.completed = [False] * len(PAGES)
         self.checksum_verified = False
+        self.checksum_skipped = False
         self.target_device = None
 
         # --- Header bar ---
@@ -123,7 +125,7 @@ class DDImagerApp(Adw.Application):
 
         # Skip button (right side, only visible on verify-checksum page)
         self.btn_skip = Gtk.Button(label='Skip')
-        self.btn_skip.connect('clicked', lambda _b: self.go_next())
+        self.btn_skip.connect('clicked', self._on_skip_checksum)
         self.header.pack_end(self.btn_skip)
 
         # --- Stack with pages ---
@@ -369,6 +371,7 @@ class DDImagerApp(Adw.Application):
             self.checksum_result_label.add_css_class('error')
             self.checksum_verified = False
             self.btn_next.set_sensitive(False)
+        return False
 
     def _on_hash_error(self, error_msg):
         """Called on the main thread if hash computation fails."""
@@ -379,6 +382,7 @@ class DDImagerApp(Adw.Application):
         self.checksum_result_label.set_label(f'Error: {error_msg}')
         self.checksum_result_label.remove_css_class('success')
         self.checksum_result_label.add_css_class('error')
+        return False
 
     # ---- Drive selection page ----
 
@@ -664,6 +668,10 @@ class DDImagerApp(Adw.Application):
 
     def _update_confirm_summary(self):
         """Populate the summary labels on the confirm page with current selections."""
+        # Reset any previous error state
+        self.write_result_label.set_visible(False)
+        self.write_result_label.remove_css_class('error')
+
         # ISO info
         if self.iso_path:
             gfile = Gio.File.new_for_path(self.iso_path)
@@ -671,8 +679,10 @@ class DDImagerApp(Adw.Application):
             try:
                 info = gfile.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, None)
                 size = info.get_size()
+                self.iso_size = size
                 size_str = format_file_size(size)
             except GLib.Error:
+                self.iso_size = 0
                 size_str = 'unknown size'
             self.confirm_iso_label.set_label(f'{filename}  ({size_str})')
             self.confirm_iso_label.remove_css_class('dim-label')
@@ -692,6 +702,16 @@ class DDImagerApp(Adw.Application):
         else:
             self.confirm_drive_label.set_label('No drive selected')
             self.confirm_drive_label.add_css_class('dim-label')
+
+        # Check ISO size vs drive size
+        if self.iso_size and self.target_device and self.iso_size > self.target_device['size']:
+            self.write_result_label.set_label(
+                f'Image ({format_file_size(self.iso_size)}) is larger than '
+                f'target drive ({format_file_size(self.target_device["size"])})')
+            self.write_result_label.add_css_class('error')
+            self.write_result_label.set_visible(True)
+            self.btn_next.set_sensitive(False)
+            return
 
     def _confirm_write(self):
         """Show a confirmation dialog before starting the write."""
@@ -722,17 +742,28 @@ class DDImagerApp(Adw.Application):
             self._start_write()
 
     def _unmount_device(self, device_path):
-        """Unmount all partitions on a device."""
+        """Unmount all partitions. Returns (success, error_message)."""
         try:
             result = subprocess.run(
                 ['lsblk', '-nro', 'MOUNTPOINT', device_path],
                 capture_output=True, text=True, timeout=10,
             )
             for mp in result.stdout.strip().split('\n'):
-                if mp:
-                    subprocess.run(['umount', mp], capture_output=True, timeout=30)
-        except Exception:
-            pass
+                if not mp:
+                    continue
+                # Try udisksctl first (works for user-mounted)
+                r = subprocess.run(
+                    ['udisksctl', 'unmount', '-b', device_path, '--no-user-interaction'],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if r.returncode != 0:
+                    # Fallback to umount
+                    r2 = subprocess.run(['umount', mp], capture_output=True, text=True, timeout=30)
+                    if r2.returncode != 0:
+                        return False, f'Failed to unmount {mp}'
+        except Exception as e:
+            return False, str(e)
+        return True, ''
 
     def _start_write(self):
         """Begin the dd write process."""
@@ -768,9 +799,52 @@ class DDImagerApp(Adw.Application):
     def _write_thread(self):
         """Run unmount + dd in a background thread."""
         device_path = self.target_device['device']
+        iso_size = self.iso_size
+
+        # Validate ISO is a regular file
+        try:
+            iso_stat = os.stat(self.iso_path)
+            if not stat.S_ISREG(iso_stat.st_mode):
+                GLib.idle_add(self._on_write_error, 'Selected path is not a regular file')
+                return
+        except OSError as e:
+            GLib.idle_add(self._on_write_error, f'Cannot access ISO file: {e}')
+            return
+
+        # Validate device is a block device
+        try:
+            dev_stat = os.stat(device_path)
+            if not stat.S_ISBLK(dev_stat.st_mode):
+                GLib.idle_add(self._on_write_error, 'Target is not a block device')
+                return
+        except OSError as e:
+            GLib.idle_add(self._on_write_error, f'Cannot access target device: {e}')
+            return
+
+        # Re-verify device at write time (TOCTOU fix)
+        name = os.path.basename(device_path)
+        sys_path = Path(f'/sys/block/{name}')
+        if not sys_path.exists():
+            GLib.idle_add(self._on_write_error, 'Device no longer exists')
+            return
+        try:
+            removable = (sys_path / 'removable').read_text().strip()
+            if removable != '1':
+                GLib.idle_add(self._on_write_error, 'Device is no longer marked as removable')
+                return
+            current_size = int((sys_path / 'size').read_text().strip()) * 512
+            if current_size != self.target_device['size']:
+                GLib.idle_add(self._on_write_error, 'Device size changed — possibly a different device')
+                return
+        except OSError as e:
+            GLib.idle_add(self._on_write_error, f'Cannot verify device: {e}')
+            return
 
         # Unmount all partitions
-        self._unmount_device(device_path)
+        success, err = self._unmount_device(device_path)
+        if not success:
+            GLib.idle_add(self._on_write_error, f'Failed to unmount device: {err}')
+            return
 
         # Build dd command via pkexec
         dd_cmd = [
@@ -788,26 +862,47 @@ class DDImagerApp(Adw.Application):
                 dd_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                preexec_fn=os.setsid,
+                start_new_session=True,
             )
         except OSError as e:
             GLib.idle_add(self._on_write_error, f'Failed to start dd: {e}')
             return
 
         # Parse progress from stderr (dd writes progress to stderr)
+        # dd status=progress uses \r not \n, so we read raw bytes in chunks
         pattern = re.compile(r'(\d+)\s+bytes')
         stderr_lines = []
-        for line in iter(self.dd_process.stderr.readline, ''):
-            stderr_lines.append(line)
-            match = pattern.search(line)
-            if match:
-                bytes_written = int(match.group(1))
-                if self.iso_size > 0:
-                    fraction = min(bytes_written / self.iso_size, 1.0)
+        stderr_fd = self.dd_process.stderr.fileno()
+        buf = ''
+        while True:
+            try:
+                chunk = os.read(stderr_fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk.decode('utf-8', errors='replace')
+            while '\r' in buf or '\n' in buf:
+                r_idx = buf.find('\r')
+                n_idx = buf.find('\n')
+                if r_idx == -1:
+                    idx = n_idx
+                elif n_idx == -1:
+                    idx = r_idx
                 else:
-                    fraction = 0.0
-                GLib.idle_add(self._update_write_progress, fraction, bytes_written, line.strip())
+                    idx = min(r_idx, n_idx)
+                line = buf[:idx]
+                buf = buf[idx + 1:]
+                if line.strip():
+                    stderr_lines.append(line)
+                    match = pattern.search(line)
+                    if match and not self.write_cancelled:
+                        bytes_written = int(match.group(1))
+                        fraction = min(bytes_written / iso_size, 1.0) if iso_size > 0 else 0
+                        GLib.idle_add(self._update_write_progress, fraction, bytes_written, line.strip())
+        # Process any remaining buffer
+        if buf.strip():
+            stderr_lines.append(buf)
 
         self.dd_process.wait()
         returncode = self.dd_process.returncode
@@ -839,17 +934,22 @@ class DDImagerApp(Adw.Application):
         speed_part = f'  —  {speed_match.group(0)}' if speed_match else ''
 
         self.write_progress_label.set_label(f'{written_str} / {total_str}{speed_part}')
+        return False
 
     def _on_cancel_write(self, _button):
         """Cancel the running dd process."""
         self.write_cancelled = True
         self.btn_cancel_write.set_sensitive(False)
         self.write_progress_label.set_label('Cancelling...')
-
-        if self.dd_process is not None:
+        proc = self.dd_process  # local snapshot to avoid race
+        if proc is not None:
             try:
-                os.killpg(os.getpgid(self.dd_process.pid), signal.SIGTERM)
-            except (ProcessLookupError, OSError):
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (ProcessLookupError, OSError, AttributeError):
+                pass
+            try:
+                proc.terminate()
+            except OSError:
                 pass
 
     def _on_write_success(self):
@@ -867,6 +967,7 @@ class DDImagerApp(Adw.Application):
         # Re-enable navigation
         self.btn_back.set_sensitive(True)
         # Don't re-show the Write button — the job is done
+        return False
 
     def _on_write_error(self, error_msg):
         """Called on the main thread when dd fails."""
@@ -881,6 +982,7 @@ class DDImagerApp(Adw.Application):
         # Re-enable navigation
         self.btn_back.set_sensitive(True)
         self.btn_next.set_visible(True)
+        return False
 
     def _on_write_cancelled(self):
         """Called on the main thread when the write was cancelled."""
@@ -895,8 +997,13 @@ class DDImagerApp(Adw.Application):
         # Re-enable navigation
         self.btn_back.set_sensitive(True)
         self.btn_next.set_visible(True)
+        return False
 
     # ---- Navigation logic ----
+
+    def _on_skip_checksum(self, _button):
+        self.checksum_skipped = True
+        self.go_next()
 
     def go_next(self):
         """Advance to the next page, or trigger write on the last page."""
@@ -955,7 +1062,7 @@ class DDImagerApp(Adw.Application):
         if page_name == 'select-iso':
             self.btn_next.set_sensitive(self.iso_path is not None)
         elif page_name == 'verify-checksum':
-            self.btn_next.set_sensitive(self.checksum_verified)
+            self.btn_next.set_sensitive(self.checksum_verified or self.checksum_skipped)
         elif page_name == 'select-drive':
             self.btn_next.set_sensitive(self.target_device is not None)
         else:
