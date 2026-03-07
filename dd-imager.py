@@ -17,13 +17,22 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, Gio, GLib
 
 
-# Page definitions: (stack_name, header_title, placeholder_label)
-PAGES = [
-    ('select-iso',       'Select ISO',       'Step 1: Select ISO'),
-    ('verify-checksum',  'Verify Checksum',  'Step 2: Verify Checksum'),
-    ('select-drive',     'Select Drive',     'Step 3: Select Drive'),
-    ('confirm-write',    'Confirm & Write',  'Step 4: Confirm & Write'),
+# Page definitions per mode: (stack_name, header_title)
+WRITE_PAGES = [
+    ('select-iso',       'Select ISO'),
+    ('verify-checksum',  'Verify Checksum'),
+    ('select-drive',     'Select Drive'),
+    ('confirm-write',    'Confirm & Write'),
 ]
+
+WIPE_PAGES = [
+    ('wipe-select-drive', 'Select Drive'),
+    ('wipe-options',      'Wipe Options'),
+    ('wipe-confirm',      'Confirm & Wipe'),
+]
+
+WRITE_STEP_NAMES = ['ISO', 'Checksum', 'Drive', 'Write']
+WIPE_STEP_NAMES = ['Drive', 'Options', 'Wipe']
 
 CUSTOM_CSS = """
 /* ==== DD-imager Neon Theme ==== */
@@ -528,7 +537,7 @@ class DDImagerApp(Adw.Application):
 
         # Wizard state
         self.current_page = 0
-        self.completed = [False] * len(PAGES)
+        self.completed = [False] * 4
         self.checksum_verified = False
         self.checksum_skipped = False
         self.gpg_verified = False
@@ -536,6 +545,12 @@ class DDImagerApp(Adw.Application):
         self.sig_file_path = None
         self.key_file_path = None
         self.target_device = None
+
+        # Mode state
+        self.app_mode = None  # 'write' or 'wipe', None = welcome screen
+        self.wipe_method = 'zero'  # 'zero', 'random', 'multipass'
+        self.wipe_format = 'raw'   # 'raw', 'fat32', 'exfat', 'ext4', 'ntfs'
+        self.wipe_cancelled = False
 
         # --- Header bar ---
         self.header = Adw.HeaderBar()
@@ -581,12 +596,22 @@ class DDImagerApp(Adw.Application):
         self.write_cancelled = False
         self.stack.add_named(self._build_confirm_page(), 'confirm-write')
 
+        # Welcome page (mode selection)
+        self.stack.add_named(self._build_welcome_page(), 'welcome')
+
+        # Wipe mode pages
+        self.stack.add_named(self._build_wipe_drive_page(), 'wipe-select-drive')
+        self.stack.add_named(self._build_wipe_options_page(), 'wipe-options')
+        self.stack.add_named(self._build_wipe_confirm_page(), 'wipe-confirm')
+
         # --- Main layout: header, step indicator, stack ---
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         vbox.append(self.header)
         vbox.append(step_indicator)
         vbox.append(self.stack)
         self.win.set_content(vbox)
+
+        self.stack.set_visible_child_name('welcome')
 
         # Set initial button states
         self.update_nav_buttons()
@@ -607,36 +632,32 @@ class DDImagerApp(Adw.Application):
         )
 
     def _build_step_indicator(self):
-        """Build a step indicator with dots, connectors, and labels."""
-        outer = Gtk.Box(
+        """Build a step indicator container (populated by _rebuild_step_indicator)."""
+        self.step_indicator_outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=6,
             halign=Gtk.Align.CENTER,
         )
-        outer.add_css_class('step-indicator')
+        self.step_indicator_outer.add_css_class('step-indicator')
+        self.step_dots = []
+        self.step_connectors = []
+        self.step_labels = []
+        return self.step_indicator_outer
 
-        # Row for dots and connectors
-        dots_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            halign=Gtk.Align.CENTER,
-            valign=Gtk.Align.CENTER,
-            spacing=0,
-        )
+    def _rebuild_step_indicator(self):
+        """Rebuild step dots/connectors/labels for the current mode."""
+        while child := self.step_indicator_outer.get_first_child():
+            self.step_indicator_outer.remove(child)
 
-        # Row for labels
-        labels_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            halign=Gtk.Align.CENTER,
-            spacing=0,
-        )
-
-        step_names = ['ISO', 'Checksum', 'Drive', 'Write']
+        step_names = self._get_step_names()
         self.step_dots = []
         self.step_connectors = []
         self.step_labels = []
 
+        dots_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, spacing=0)
+        labels_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, halign=Gtk.Align.CENTER, spacing=0)
+
         for i, name in enumerate(step_names):
-            # Dot
             dot = Gtk.Box(halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
             dot.add_css_class('step-dot')
             if i == 0:
@@ -644,7 +665,6 @@ class DDImagerApp(Adw.Application):
             dots_row.append(dot)
             self.step_dots.append(dot)
 
-            # Label
             label = Gtk.Label(label=name, halign=Gtk.Align.CENTER)
             label.set_width_chars(8)
             label.add_css_class('step-label')
@@ -653,25 +673,21 @@ class DDImagerApp(Adw.Application):
             labels_row.append(label)
             self.step_labels.append(label)
 
-            # Connector (between dots)
             if i < len(step_names) - 1:
                 connector = Gtk.Box(valign=Gtk.Align.CENTER)
                 connector.add_css_class('step-connector')
                 dots_row.append(connector)
                 self.step_connectors.append(connector)
-
-                # Spacer to match connector width in labels row
                 spacer = Gtk.Box()
                 spacer.set_size_request(40, 1)
                 labels_row.append(spacer)
 
-        outer.append(dots_row)
-        outer.append(labels_row)
-        return outer
+        self.step_indicator_outer.append(dots_row)
+        self.step_indicator_outer.append(labels_row)
 
     def _update_step_indicator(self):
         """Update step dots, connectors, and labels for the current page."""
-        for i in range(len(PAGES)):
+        for i in range(len(self._get_pages())):
             dot = self.step_dots[i]
             label = self.step_labels[i]
 
@@ -1828,45 +1844,100 @@ class DDImagerApp(Adw.Application):
 
     # ---- Navigation logic ----
 
+    def _get_pages(self):
+        """Return the page list for the current mode."""
+        if self.app_mode == 'wipe':
+            return WIPE_PAGES
+        return WRITE_PAGES
+
+    def _get_step_names(self):
+        """Return the step names for the current mode."""
+        if self.app_mode == 'wipe':
+            return WIPE_STEP_NAMES
+        return WRITE_STEP_NAMES
+
+    def _on_mode_selected(self, mode):
+        """Set the app mode and navigate to the first wizard page."""
+        self.app_mode = mode
+        pages = self._get_pages()
+        self.current_page = 0
+        self.completed = [False] * len(pages)
+        self._rebuild_step_indicator()
+        self.stack.set_visible_child_name(pages[0][0])
+        self._on_page_entered()
+        self.update_nav_buttons()
+
+    def _go_home(self):
+        """Return to the welcome screen."""
+        self.app_mode = None
+        self.current_page = 0
+        self.stack.set_visible_child_name('welcome')
+        self.update_nav_buttons()
+
     def _on_skip_checksum(self, _button):
         self.checksum_skipped = True
         self.go_next()
 
     def go_next(self):
-        """Advance to the next page, or trigger write on the last page."""
-        if self.current_page == len(PAGES) - 1:
-            # On the last page, Write button triggers confirmation
-            self._confirm_write()
+        """Advance to the next page, or trigger write/wipe on the last page."""
+        pages = self._get_pages()
+        if self.current_page == len(pages) - 1:
+            if self.app_mode == 'wipe':
+                self._confirm_wipe()
+            else:
+                self._confirm_write()
             return
-        if self.current_page < len(PAGES) - 1:
+        if self.current_page < len(pages) - 1:
             self.completed[self.current_page] = True
             self.current_page += 1
-            self.stack.set_visible_child_name(PAGES[self.current_page][0])
+            self.stack.set_visible_child_name(pages[self.current_page][0])
             self._on_page_entered()
             self.update_nav_buttons()
 
     def go_back(self):
-        """Return to the previous page."""
+        """Return to the previous page, or go home from page 0."""
         if self.current_page > 0:
             self.current_page -= 1
-            self.stack.set_visible_child_name(PAGES[self.current_page][0])
+            pages = self._get_pages()
+            self.stack.set_visible_child_name(pages[self.current_page][0])
             self._on_page_entered()
             self.update_nav_buttons()
+        else:
+            self._go_home()
 
     def _on_page_entered(self):
         """Called whenever the visible page changes; refreshes page-specific content."""
-        page_name = PAGES[self.current_page][0]
+        pages = self._get_pages()
+        page_name = pages[self.current_page][0]
         if page_name == 'verify-checksum':
             self._update_checksum_file_info()
         elif page_name == 'select-drive':
             self._refresh_drives()
         elif page_name == 'confirm-write':
             self._update_confirm_summary()
+        elif page_name == 'wipe-select-drive':
+            self._refresh_drives()
+        elif page_name == 'wipe-confirm':
+            self._update_wipe_summary()
 
     def update_nav_buttons(self):
         """Update button visibility, sensitivity, and labels for the current page."""
-        page_name = PAGES[self.current_page][0]
-        page_title = PAGES[self.current_page][1]
+        # Welcome screen: hide all nav
+        if self.app_mode is None:
+            self.title_label.set_label('DD-imager')
+            self.btn_back.set_visible(False)
+            self.btn_next.set_visible(False)
+            self.btn_skip.set_visible(False)
+            self.step_indicator_outer.set_visible(False)
+            return
+
+        pages = self._get_pages()
+        page_name = pages[self.current_page][0]
+        page_title = pages[self.current_page][1]
+
+        # Show step indicator and next button in wizard
+        self.step_indicator_outer.set_visible(True)
+        self.btn_next.set_visible(True)
 
         # Update header title to reflect the current step
         self.title_label.set_label(page_title)
@@ -1874,19 +1945,22 @@ class DDImagerApp(Adw.Application):
         # Update step indicator
         self._update_step_indicator()
 
-        # Back button: hidden on first page
-        self.btn_back.set_visible(self.current_page > 0)
+        # Back button: always visible in wizard (goes home from page 0)
+        self.btn_back.set_visible(True)
 
         # Skip button: only visible on the verify-checksum page
         self.btn_skip.set_visible(page_name == 'verify-checksum')
 
-        # Next / Write button
+        # Next / Write / Wipe button
+        self.btn_next.remove_css_class('destructive-action')
         if page_name == 'confirm-write':
             self.btn_next.set_label('Write')
             self.btn_next.add_css_class('destructive-action')
+        elif page_name == 'wipe-confirm':
+            self.btn_next.set_label('Wipe')
+            self.btn_next.add_css_class('destructive-action')
         else:
             self.btn_next.set_label('Next')
-            self.btn_next.remove_css_class('destructive-action')
 
         # Next button sensitivity depends on page validation
         if page_name == 'select-iso':
@@ -1897,8 +1971,36 @@ class DDImagerApp(Adw.Application):
             self.btn_next.set_sensitive(sha_ok or gpg_ok or self.checksum_skipped)
         elif page_name == 'select-drive':
             self.btn_next.set_sensitive(self.target_device is not None)
+        elif page_name == 'wipe-select-drive':
+            self.btn_next.set_sensitive(self.target_device is not None)
+        elif page_name == 'wipe-options':
+            self.btn_next.set_sensitive(True)
         else:
             self.btn_next.set_sensitive(True)
+
+    # ---- Welcome and wipe page stubs ----
+
+    def _build_welcome_page(self):
+        return Gtk.Box()
+
+    def _build_wipe_drive_page(self):
+        # Need wipe_drive_listbox and wipe_drive_empty_label for _refresh_drives
+        page = Gtk.Box()
+        self.wipe_drive_listbox = Gtk.ListBox()
+        self.wipe_drive_empty_label = Gtk.Label()
+        return page
+
+    def _build_wipe_options_page(self):
+        return Gtk.Box()
+
+    def _build_wipe_confirm_page(self):
+        return Gtk.Box()
+
+    def _confirm_wipe(self):
+        pass
+
+    def _update_wipe_summary(self):
+        pass
 
 
 if __name__ == '__main__':
