@@ -2131,7 +2131,122 @@ class DDImagerApp(Adw.Application):
         return page
 
     def _build_wipe_options_page(self):
-        return Gtk.Box()
+        """Build the wipe options page with method and format selection."""
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
+            spacing=16,
+        )
+
+        heading = Gtk.Label(label='Wipe Options')
+        heading.add_css_class('title-1')
+        page.append(heading)
+
+        # Scrollable content for smaller screens
+        scrolled = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            max_content_height=380,
+            propagate_natural_height=True,
+        )
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            halign=Gtk.Align.CENTER,
+            margin_start=16, margin_end=16,
+        )
+
+        # --- Wipe Method ---
+        method_heading = Gtk.Label(label='WIPE METHOD', halign=Gtk.Align.START)
+        method_heading.add_css_class('wipe-section-heading')
+        content.append(method_heading)
+
+        self.wipe_method_buttons = {}
+        methods = [
+            ('zero', 'Zero fill', 'Write zeros to every byte. Fast. Sufficient for flash/SSD drives.'),
+            ('random', 'Random fill', 'Write random data from /dev/urandom. Preferred for magnetic hard drives.'),
+            ('multipass', 'Multi-pass', '3 passes: zeros, ones, random. Maximum security. Slowest.'),
+        ]
+
+        first_method_btn = None
+        for key, title, desc in methods:
+            btn = Gtk.ToggleButton()
+            btn.add_css_class('wipe-option-box')
+            btn.set_has_frame(False)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            title_lbl = Gtk.Label(label=title, halign=Gtk.Align.START)
+            title_lbl.add_css_class('wipe-option-title')
+            box.append(title_lbl)
+            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=50)
+            desc_lbl.add_css_class('wipe-option-desc')
+            box.append(desc_lbl)
+            btn.set_child(box)
+
+            if first_method_btn is None:
+                first_method_btn = btn
+                btn.set_active(True)
+            else:
+                btn.set_group(first_method_btn)
+
+            btn.connect('toggled', self._on_wipe_method_changed, key)
+            content.append(btn)
+            self.wipe_method_buttons[key] = btn
+
+        # --- Post-Wipe Format ---
+        format_heading = Gtk.Label(label='AFTER WIPE', halign=Gtk.Align.START)
+        format_heading.add_css_class('wipe-section-heading')
+        content.append(format_heading)
+
+        self.wipe_format_buttons = {}
+        formats = [
+            ('raw', 'Leave raw', 'No partition table or filesystem. Drive will appear unformatted.'),
+            ('fat32', 'Format FAT32', 'Universal compatibility. Windows, Mac, Linux. Max file size 4 GB.'),
+            ('exfat', 'Format exFAT', 'Modern USB drives. Windows, Mac, Linux. No file size limit.'),
+            ('ext4', 'Format ext4', 'Linux only. Best for Linux-exclusive drives. Supports permissions.'),
+            ('ntfs', 'Format NTFS', 'Windows drives. Linux read/write with ntfs-3g. No Mac write support.'),
+        ]
+
+        first_format_btn = None
+        for key, title, desc in formats:
+            btn = Gtk.ToggleButton()
+            btn.add_css_class('wipe-option-box')
+            btn.set_has_frame(False)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            title_lbl = Gtk.Label(label=title, halign=Gtk.Align.START)
+            title_lbl.add_css_class('wipe-option-title')
+            box.append(title_lbl)
+            desc_lbl = Gtk.Label(label=desc, halign=Gtk.Align.START, wrap=True, max_width_chars=50)
+            desc_lbl.add_css_class('wipe-option-desc')
+            box.append(desc_lbl)
+            btn.set_child(box)
+
+            if first_format_btn is None:
+                first_format_btn = btn
+                btn.set_active(True)
+            else:
+                btn.set_group(first_format_btn)
+
+            btn.connect('toggled', self._on_wipe_format_changed, key)
+            content.append(btn)
+            self.wipe_format_buttons[key] = btn
+
+        scrolled.set_child(content)
+        page.append(scrolled)
+        return page
+
+    def _on_wipe_method_changed(self, button, key):
+        """Handle wipe method radio selection."""
+        if button.get_active():
+            self.wipe_method = key
+
+    def _on_wipe_format_changed(self, button, key):
+        """Handle post-wipe format radio selection."""
+        if button.get_active():
+            self.wipe_format = key
 
     def _build_wipe_confirm_page(self):
         return Gtk.Box()
