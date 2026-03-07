@@ -1301,31 +1301,38 @@ class DDImagerApp(Adw.Application):
 
     def _refresh_drives(self):
         """Rescan for removable USB drives and repopulate the list."""
-        # Clear current selection
         self.target_device = None
         self.btn_next.set_sensitive(False)
 
+        # Pick the correct listbox and empty label for the current mode
+        if self.app_mode == 'wipe':
+            listbox = self.wipe_drive_listbox
+            empty_label = self.wipe_drive_empty_label
+        else:
+            listbox = self.drive_listbox
+            empty_label = self.drive_empty_label
+
         # Remove all existing rows
         while True:
-            row = self.drive_listbox.get_row_at_index(0)
+            row = listbox.get_row_at_index(0)
             if row is None:
                 break
-            self.drive_listbox.remove(row)
+            listbox.remove(row)
 
         # Detect drives
         drives = get_removable_drives()
 
         if not drives:
-            self.drive_listbox.set_visible(False)
-            self.drive_empty_label.set_visible(True)
+            listbox.set_visible(False)
+            empty_label.set_visible(True)
             return
 
-        self.drive_listbox.set_visible(True)
-        self.drive_empty_label.set_visible(False)
+        listbox.set_visible(True)
+        empty_label.set_visible(False)
 
         for drive in drives:
             row = self._make_drive_row(drive)
-            self.drive_listbox.append(row)
+            listbox.append(row)
 
     def _make_drive_row(self, drive):
         """Create a ListBox row for a single drive."""
@@ -2064,10 +2071,63 @@ class DDImagerApp(Adw.Application):
         return page
 
     def _build_wipe_drive_page(self):
-        # Need wipe_drive_listbox and wipe_drive_empty_label for _refresh_drives
-        page = Gtk.Box()
+        """Build the wipe mode drive selection page."""
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Warning banner
+        warning_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.FILL,
+        )
+        warning_box.add_css_class('warning-banner')
+        warning_label = Gtk.Label(
+            label='\u26a0  All data on the selected drive will be permanently destroyed',
+            halign=Gtk.Align.CENTER,
+            hexpand=True,
+            margin_top=10, margin_bottom=10, margin_start=12, margin_end=12,
+        )
+        warning_label.add_css_class('warning-banner')
+        warning_box.append(warning_label)
+        page.append(warning_box)
+
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=12,
+            margin_top=16, margin_bottom=16, margin_start=24, margin_end=24,
+            vexpand=True,
+        )
+
+        heading = Gtk.Label(label='Select drive to wipe', halign=Gtk.Align.START)
+        heading.add_css_class('title-2')
+        content.append(heading)
+
+        scrolled = Gtk.ScrolledWindow(
+            vexpand=True,
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+        )
+        scrolled.add_css_class('card')
+
         self.wipe_drive_listbox = Gtk.ListBox()
-        self.wipe_drive_empty_label = Gtk.Label()
+        self.wipe_drive_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.wipe_drive_listbox.add_css_class('boxed-list')
+        self.wipe_drive_listbox.connect('row-selected', self._on_drive_selected)
+        scrolled.set_child(self.wipe_drive_listbox)
+        content.append(scrolled)
+
+        self.wipe_drive_empty_label = Gtk.Label(
+            label='No removable USB drives detected. Insert a drive and click Refresh.',
+            halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER,
+            vexpand=True, wrap=True, max_width_chars=50,
+        )
+        self.wipe_drive_empty_label.add_css_class('dim-label')
+        self.wipe_drive_empty_label.set_visible(False)
+        content.append(self.wipe_drive_empty_label)
+
+        btn_refresh = Gtk.Button(label='Refresh', halign=Gtk.Align.CENTER)
+        btn_refresh.add_css_class('pill')
+        btn_refresh.connect('clicked', lambda _b: self._refresh_drives())
+        content.append(btn_refresh)
+
+        page.append(content)
         return page
 
     def _build_wipe_options_page(self):
