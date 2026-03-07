@@ -358,6 +358,75 @@ dialog {
     font-size: 13px;
     font-weight: 500;
 }
+
+/* ---- Welcome mode cards ---- */
+.mode-card {
+    background-color: #1a1a2e;
+    border: 1px solid alpha(#818cf8, 0.2);
+    border-radius: 16px;
+    padding: 32px 24px;
+    transition: all 200ms ease;
+    min-width: 220px;
+}
+
+.mode-card:hover {
+    border-color: alpha(#818cf8, 0.5);
+    box-shadow: 0 4px 20px alpha(#818cf8, 0.2);
+    background-color: #1e1e36;
+}
+
+.mode-card:active {
+    background-color: alpha(#818cf8, 0.1);
+}
+
+.mode-card-icon {
+    font-size: 48px;
+    margin-bottom: 8px;
+}
+
+.mode-card-title {
+    color: #e0e0ff;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.mode-card-subtitle {
+    color: alpha(#c4c4f0, 0.6);
+    font-size: 12px;
+}
+
+/* ---- Wipe options ---- */
+.wipe-section-heading {
+    color: #f472b6;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+.wipe-option-box {
+    background-color: #16213e;
+    border: 1px solid #2d2d5e;
+    border-radius: 10px;
+    padding: 12px 16px;
+    transition: all 200ms ease;
+}
+
+.wipe-option-box:checked {
+    border-color: #818cf8;
+    background-color: alpha(#818cf8, 0.08);
+    box-shadow: 0 0 8px alpha(#818cf8, 0.2);
+}
+
+.wipe-option-title {
+    color: #e0e0ff;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.wipe-option-desc {
+    color: alpha(#c4c4f0, 0.6);
+    font-size: 11px;
+}
 """
 
 
