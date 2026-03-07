@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DD-imager
+Comment=Safely write ISO/IMG files to USB drives
+Exec=dd-imager
+Icon=dd-imager
+Categories=Utility;System;
+StartupNotify=false
