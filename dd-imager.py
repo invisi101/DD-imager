@@ -3,6 +3,9 @@
 
 import hashlib
 import json
+import os
+import re
+import signal
 import subprocess
 import threading
 from pathlib import Path
@@ -139,15 +142,10 @@ class DDImagerApp(Adw.Application):
         # Page 2: Select Drive (real implementation)
         self.stack.add_named(self._build_drive_page(), 'select-drive')
 
-        # Pages 3+: placeholders
-        for name, _title, label_text in PAGES[3:]:
-            page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
-                               halign=Gtk.Align.CENTER,
-                               valign=Gtk.Align.CENTER)
-            page_label = Gtk.Label(label=label_text)
-            page_label.add_css_class('title-1')
-            page_box.append(page_label)
-            self.stack.add_named(page_box, name)
+        # Page 3: Confirm & Write (real implementation)
+        self.dd_process = None
+        self.write_cancelled = False
+        self.stack.add_named(self._build_confirm_page(), 'confirm-write')
 
         # --- Main layout: header on top, stack below ---
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -554,10 +552,358 @@ class DDImagerApp(Adw.Application):
             self.target_device = None
             self.btn_next.set_sensitive(False)
 
+    # ---- Confirm & Write page ----
+
+    def _build_confirm_page(self):
+        """Build the Confirm & Write page with summary, progress bar, and result label."""
+        page = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0,
+        )
+
+        # Content area with margins
+        content = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=16,
+            margin_top=24,
+            margin_bottom=24,
+            margin_start=24,
+            margin_end=24,
+            vexpand=True,
+        )
+
+        heading = Gtk.Label(label='Review & Write', halign=Gtk.Align.START)
+        heading.add_css_class('title-2')
+        content.append(heading)
+
+        # --- Summary section ---
+        summary_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+        )
+        summary_box.add_css_class('card')
+        summary_inner = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            margin_top=16,
+            margin_bottom=16,
+            margin_start=16,
+            margin_end=16,
+        )
+
+        # Source ISO info
+        source_heading = Gtk.Label(label='Source Image', halign=Gtk.Align.START)
+        source_heading.add_css_class('heading')
+        summary_inner.append(source_heading)
+
+        self.confirm_iso_label = Gtk.Label(
+            label='No file selected',
+            halign=Gtk.Align.START,
+            wrap=True,
+            max_width_chars=60,
+        )
+        self.confirm_iso_label.add_css_class('dim-label')
+        summary_inner.append(self.confirm_iso_label)
+
+        # Separator
+        summary_inner.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Target drive info
+        target_heading = Gtk.Label(label='Target Drive', halign=Gtk.Align.START)
+        target_heading.add_css_class('heading')
+        summary_inner.append(target_heading)
+
+        self.confirm_drive_label = Gtk.Label(
+            label='No drive selected',
+            halign=Gtk.Align.START,
+            wrap=True,
+            max_width_chars=60,
+        )
+        self.confirm_drive_label.add_css_class('dim-label')
+        summary_inner.append(self.confirm_drive_label)
+
+        summary_box.append(summary_inner)
+        content.append(summary_box)
+
+        # --- Progress section (hidden until write starts) ---
+        self.write_progress_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=8,
+        )
+        self.write_progress_box.set_visible(False)
+
+        self.write_progress_bar = Gtk.ProgressBar()
+        self.write_progress_bar.set_show_text(True)
+        self.write_progress_box.append(self.write_progress_bar)
+
+        self.write_progress_label = Gtk.Label(label='', halign=Gtk.Align.START)
+        self.write_progress_label.add_css_class('dim-label')
+        self.write_progress_label.set_wrap(True)
+        self.write_progress_label.set_max_width_chars(60)
+        self.write_progress_box.append(self.write_progress_label)
+
+        # Cancel button
+        self.btn_cancel_write = Gtk.Button(label='Cancel')
+        self.btn_cancel_write.add_css_class('pill')
+        self.btn_cancel_write.add_css_class('destructive-action')
+        self.btn_cancel_write.set_halign(Gtk.Align.CENTER)
+        self.btn_cancel_write.connect('clicked', self._on_cancel_write)
+        self.write_progress_box.append(self.btn_cancel_write)
+
+        content.append(self.write_progress_box)
+
+        # --- Result label (shown after write completes or fails) ---
+        self.write_result_label = Gtk.Label(label='', halign=Gtk.Align.CENTER)
+        self.write_result_label.set_wrap(True)
+        self.write_result_label.set_max_width_chars(60)
+        self.write_result_label.set_visible(False)
+        content.append(self.write_result_label)
+
+        page.append(content)
+        return page
+
+    def _update_confirm_summary(self):
+        """Populate the summary labels on the confirm page with current selections."""
+        # ISO info
+        if self.iso_path:
+            gfile = Gio.File.new_for_path(self.iso_path)
+            filename = GLib.path_get_basename(self.iso_path)
+            try:
+                info = gfile.query_info('standard::size', Gio.FileQueryInfoFlags.NONE, None)
+                size = info.get_size()
+                size_str = format_file_size(size)
+            except GLib.Error:
+                size_str = 'unknown size'
+            self.confirm_iso_label.set_label(f'{filename}  ({size_str})')
+            self.confirm_iso_label.remove_css_class('dim-label')
+        else:
+            self.confirm_iso_label.set_label('No file selected')
+            self.confirm_iso_label.add_css_class('dim-label')
+
+        # Drive info
+        if self.target_device:
+            dev = self.target_device
+            label_part = f'  —  {dev["label"]}' if dev.get('label') else ''
+            size_str = format_file_size(dev['size'])
+            self.confirm_drive_label.set_label(
+                f'{dev["device"]}{label_part}  ({size_str})'
+            )
+            self.confirm_drive_label.remove_css_class('dim-label')
+        else:
+            self.confirm_drive_label.set_label('No drive selected')
+            self.confirm_drive_label.add_css_class('dim-label')
+
+    def _confirm_write(self):
+        """Show a confirmation dialog before starting the write."""
+        if not self.iso_path or not self.target_device:
+            return
+
+        dev = self.target_device
+        label_part = f' ({dev["label"]})' if dev.get('label') else ''
+
+        dialog = Adw.AlertDialog(
+            heading='Confirm Write',
+            body=(
+                f'This will erase ALL data on {dev["device"]}{label_part}.\n\n'
+                'Are you sure?'
+            ),
+        )
+        dialog.add_response('cancel', 'Cancel')
+        dialog.add_response('write', 'Write')
+        dialog.set_response_appearance('write', Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response('cancel')
+        dialog.set_close_response('cancel')
+        dialog.connect('response', self._on_confirm_response)
+        dialog.present(self.win)
+
+    def _on_confirm_response(self, dialog, response):
+        """Handle the confirmation dialog response."""
+        if response == 'write':
+            self._start_write()
+
+    def _unmount_device(self, device_path):
+        """Unmount all partitions on a device."""
+        try:
+            result = subprocess.run(
+                ['lsblk', '-nro', 'MOUNTPOINT', device_path],
+                capture_output=True, text=True, timeout=10,
+            )
+            for mp in result.stdout.strip().split('\n'):
+                if mp:
+                    subprocess.run(['umount', mp], capture_output=True, timeout=30)
+        except Exception:
+            pass
+
+    def _start_write(self):
+        """Begin the dd write process."""
+        self.write_cancelled = False
+
+        # Switch UI to progress mode
+        self.write_progress_box.set_visible(True)
+        self.write_progress_bar.set_fraction(0.0)
+        self.write_progress_bar.set_text('0%')
+        self.write_progress_label.set_label('Starting write...')
+        self.btn_cancel_write.set_sensitive(True)
+        self.btn_cancel_write.set_visible(True)
+
+        self.write_result_label.set_visible(False)
+        self.write_result_label.set_label('')
+        self.write_result_label.remove_css_class('success')
+        self.write_result_label.remove_css_class('error')
+
+        # Disable navigation during write
+        self.btn_next.set_visible(False)
+        self.btn_back.set_sensitive(False)
+
+        # Get ISO size for progress calculation
+        try:
+            self.iso_size = os.path.getsize(self.iso_path)
+        except OSError:
+            self.iso_size = 0
+
+        # Unmount the device first, then start dd in a thread
+        thread = threading.Thread(target=self._write_thread, daemon=True)
+        thread.start()
+
+    def _write_thread(self):
+        """Run unmount + dd in a background thread."""
+        device_path = self.target_device['device']
+
+        # Unmount all partitions
+        self._unmount_device(device_path)
+
+        # Build dd command via pkexec
+        dd_cmd = [
+            'pkexec', 'dd',
+            f'if={self.iso_path}',
+            f'of={device_path}',
+            'bs=4M',
+            'status=progress',
+            'oflag=sync',
+            'conv=fsync',
+        ]
+
+        try:
+            self.dd_process = subprocess.Popen(
+                dd_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                preexec_fn=os.setsid,
+            )
+        except OSError as e:
+            GLib.idle_add(self._on_write_error, f'Failed to start dd: {e}')
+            return
+
+        # Parse progress from stderr (dd writes progress to stderr)
+        pattern = re.compile(r'(\d+)\s+bytes')
+        stderr_lines = []
+        for line in iter(self.dd_process.stderr.readline, ''):
+            stderr_lines.append(line)
+            match = pattern.search(line)
+            if match:
+                bytes_written = int(match.group(1))
+                if self.iso_size > 0:
+                    fraction = min(bytes_written / self.iso_size, 1.0)
+                else:
+                    fraction = 0.0
+                GLib.idle_add(self._update_write_progress, fraction, bytes_written, line.strip())
+
+        self.dd_process.wait()
+        returncode = self.dd_process.returncode
+        self.dd_process = None
+
+        if self.write_cancelled:
+            GLib.idle_add(self._on_write_cancelled)
+        elif returncode == 0:
+            # Run sync
+            try:
+                subprocess.run(['sync'], timeout=60)
+            except Exception:
+                pass
+            GLib.idle_add(self._on_write_success)
+        else:
+            error_text = ''.join(stderr_lines[-10:])  # last 10 lines of stderr
+            GLib.idle_add(self._on_write_error, f'dd exited with code {returncode}\n{error_text}')
+
+    def _update_write_progress(self, fraction, bytes_written, detail_line):
+        """Update the progress bar and label from the main thread."""
+        self.write_progress_bar.set_fraction(fraction)
+        self.write_progress_bar.set_text(f'{fraction:.0%}')
+
+        written_str = format_file_size(bytes_written)
+        total_str = format_file_size(self.iso_size) if self.iso_size > 0 else '?'
+
+        # Try to extract speed from detail line (e.g. "224 MB/s")
+        speed_match = re.search(r'[\d.]+ [KMGT]?B/s', detail_line)
+        speed_part = f'  —  {speed_match.group(0)}' if speed_match else ''
+
+        self.write_progress_label.set_label(f'{written_str} / {total_str}{speed_part}')
+
+    def _on_cancel_write(self, _button):
+        """Cancel the running dd process."""
+        self.write_cancelled = True
+        self.btn_cancel_write.set_sensitive(False)
+        self.write_progress_label.set_label('Cancelling...')
+
+        if self.dd_process is not None:
+            try:
+                os.killpg(os.getpgid(self.dd_process.pid), signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                pass
+
+    def _on_write_success(self):
+        """Called on the main thread when dd completes successfully."""
+        self.write_progress_bar.set_fraction(1.0)
+        self.write_progress_bar.set_text('100%')
+        self.write_progress_label.set_label('Write complete.')
+        self.btn_cancel_write.set_visible(False)
+
+        self.write_result_label.set_label('Image written successfully!')
+        self.write_result_label.remove_css_class('error')
+        self.write_result_label.add_css_class('success')
+        self.write_result_label.set_visible(True)
+
+        # Re-enable navigation
+        self.btn_back.set_sensitive(True)
+        # Don't re-show the Write button — the job is done
+
+    def _on_write_error(self, error_msg):
+        """Called on the main thread when dd fails."""
+        self.write_progress_label.set_label('Write failed.')
+        self.btn_cancel_write.set_visible(False)
+
+        self.write_result_label.set_label(f'Error: {error_msg}')
+        self.write_result_label.remove_css_class('success')
+        self.write_result_label.add_css_class('error')
+        self.write_result_label.set_visible(True)
+
+        # Re-enable navigation
+        self.btn_back.set_sensitive(True)
+        self.btn_next.set_visible(True)
+
+    def _on_write_cancelled(self):
+        """Called on the main thread when the write was cancelled."""
+        self.write_progress_label.set_label('Write cancelled.')
+        self.btn_cancel_write.set_visible(False)
+
+        self.write_result_label.set_label('Write was cancelled by user.')
+        self.write_result_label.remove_css_class('success')
+        self.write_result_label.add_css_class('error')
+        self.write_result_label.set_visible(True)
+
+        # Re-enable navigation
+        self.btn_back.set_sensitive(True)
+        self.btn_next.set_visible(True)
+
     # ---- Navigation logic ----
 
     def go_next(self):
-        """Advance to the next page."""
+        """Advance to the next page, or trigger write on the last page."""
+        if self.current_page == len(PAGES) - 1:
+            # On the last page, Write button triggers confirmation
+            self._confirm_write()
+            return
         if self.current_page < len(PAGES) - 1:
             self.completed[self.current_page] = True
             self.current_page += 1
@@ -580,6 +926,8 @@ class DDImagerApp(Adw.Application):
             self._update_checksum_file_info()
         elif page_name == 'select-drive':
             self._refresh_drives()
+        elif page_name == 'confirm-write':
+            self._update_confirm_summary()
 
     def update_nav_buttons(self):
         """Update button visibility, sensitivity, and labels for the current page."""
