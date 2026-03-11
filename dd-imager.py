@@ -2001,24 +2001,25 @@ class DDImagerApp(Adw.Application):
         """Build the welcome/mode selection page with two large cards."""
         page = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            halign=Gtk.Align.CENTER,
-            valign=Gtk.Align.CENTER,
-            spacing=32,
+            spacing=0,
         )
 
-        heading = Gtk.Label(label='DD-imager')
-        heading.add_css_class('title-1')
+        heading = Gtk.Label()
+        heading.set_markup(
+            '<span font_family="Vegan Style Personal Use" size="30000" foreground="#f472b6">DD-imager</span>'
+        )
+        heading.set_halign(Gtk.Align.START)
+        heading.set_margin_start(24)
+        heading.set_margin_top(16)
         page.append(heading)
-
-        subtitle = Gtk.Label(label='What would you like to do?')
-        subtitle.add_css_class('dim-label')
-        page.append(subtitle)
 
         # Cards row
         cards_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             halign=Gtk.Align.CENTER,
+            valign=Gtk.Align.CENTER,
             spacing=24,
+            vexpand=True,
         )
 
         # Write Image card
