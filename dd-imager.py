@@ -503,6 +503,14 @@ def get_removable_drives():
             model = (dev / 'device' / 'model').read_text().strip()
         except OSError:
             pass
+        # SD/microSD cards: use device/type and device/name instead
+        if not model and name.startswith('mmcblk'):
+            try:
+                card_type = (dev / 'device' / 'type').read_text().strip()
+                card_name = (dev / 'device' / 'name').read_text().strip()
+                model = f'{card_type} {card_name}' if card_type else card_name
+            except OSError:
+                pass
 
         drives.append({
             'device': device_path,
