@@ -450,7 +450,7 @@ def format_file_size(size_bytes):
 
 
 def get_removable_drives():
-    """Detect removable USB drives by reading sysfs and lsblk."""
+    """Detect removable USB drives and SD cards by reading sysfs and lsblk."""
     drives = []
     for dev in sorted(Path('/sys/block').iterdir()):
         name = dev.name
@@ -460,7 +460,8 @@ def get_removable_drives():
             removable = (dev / 'removable').read_text().strip()
         except OSError:
             continue
-        if removable != '1':
+        # Accept devices marked removable, or mmcblk (SD/microSD cards)
+        if removable != '1' and not name.startswith('mmcblk'):
             continue
         size_sectors = int((dev / 'size').read_text().strip())
         size_bytes = size_sectors * 512
@@ -1688,7 +1689,7 @@ class DDImagerApp(Adw.Application):
             return
         try:
             removable = (sys_path / 'removable').read_text().strip()
-            if removable != '1':
+            if removable != '1' and not name.startswith('mmcblk'):
                 GLib.idle_add(self._on_write_error, 'Device is no longer marked as removable')
                 return
             current_size = int((sys_path / 'size').read_text().strip()) * 512
@@ -2427,7 +2428,7 @@ class DDImagerApp(Adw.Application):
             return
         try:
             removable = (sys_path / 'removable').read_text().strip()
-            if removable != '1':
+            if removable != '1' and not name.startswith('mmcblk'):
                 GLib.idle_add(self._on_wipe_error, 'Device is not marked as removable')
                 return
             current_size = int((sys_path / 'size').read_text().strip()) * 512
