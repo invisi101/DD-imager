@@ -1721,7 +1721,6 @@ class DDImagerApp(Adw.Application):
             f'of={device_path}',
             'bs=4M',
             'status=progress',
-            'oflag=sync',
             'conv=fsync',
         ]
 
@@ -2269,7 +2268,7 @@ class DDImagerApp(Adw.Application):
         self.wipe_label_box.append(label_lbl)
         self.wipe_label_entry = Gtk.Entry()
         self.wipe_label_entry.set_placeholder_text('e.g. MY_USB')
-        self.wipe_label_entry.set_max_length(32)
+        self.wipe_label_entry.set_max_length(11)
         self.wipe_label_entry.set_width_chars(20)
         self.wipe_label_box.append(self.wipe_label_entry)
         self.wipe_label_box.set_visible(False)  # hidden when 'raw' is selected
@@ -2287,6 +2286,11 @@ class DDImagerApp(Adw.Application):
         if button.get_active():
             self.wipe_format = key
             self.wipe_label_box.set_visible(key != 'raw')
+            # FAT32 labels max 11 chars, others allow more
+            if key == 'fat32':
+                self.wipe_label_entry.set_max_length(11)
+            else:
+                self.wipe_label_entry.set_max_length(32)
 
     def _build_wipe_confirm_page(self):
         """Build the wipe confirmation page with summary, progress, and result."""
@@ -2459,20 +2463,20 @@ class DDImagerApp(Adw.Application):
 
         if self.wipe_method == 'quick':
             script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Erasing partition table'")
-            script_lines.append(f"dd if=/dev/zero of={dev} bs=1M count=10 conv=fsync 2>&1 || true")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=1M count=10 status=progress conv=fsync 2>&1 || true")
         elif self.wipe_method == 'zero':
             script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Zeroing'")
-            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress conv=fsync 2>&1 || true")
         elif self.wipe_method == 'random':
             script_lines.append(f"echo 'DDIMAGER_PASS:1:1:Writing random data'")
-            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress conv=fsync 2>&1 || true")
         else:  # multipass
             script_lines.append(f"echo 'DDIMAGER_PASS:1:3:Pass 1/3: Zeros'")
-            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"dd if=/dev/zero of={dev} bs=4M status=progress conv=fsync 2>&1 || true")
             script_lines.append(f"echo 'DDIMAGER_PASS:2:3:Pass 2/3: Ones'")
-            script_lines.append(f"tr '\\0' '\\377' < /dev/zero | dd of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"tr '\\0' '\\377' < /dev/zero | dd of={dev} bs=4M status=progress conv=fsync 2>&1 || true")
             script_lines.append(f"echo 'DDIMAGER_PASS:3:3:Pass 3/3: Random'")
-            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress oflag=sync conv=fsync 2>&1 || true")
+            script_lines.append(f"dd if=/dev/urandom of={dev} bs=4M status=progress conv=fsync 2>&1 || true")
 
         # Post-wipe formatting
         if self.wipe_format != 'raw':
